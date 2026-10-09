@@ -113,9 +113,9 @@ def main() -> None:
             with c1:
                 st.metric("Mesures", len(df))
             with c2:
-                st.metric("Depuis", df["date"].min().date())
+                st.metric("Depuis", str(df["date"].min().date()))
             with c3:
-                st.metric("Jusqu'à", df["date"].max().date())
+                st.metric("Jusqu'à", str(df["date"].max().date()))
 
             parametres = sorted(df["parametre"].dropna().unique())
             if cle == "poissons":
