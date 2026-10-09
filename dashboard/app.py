@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
+import requests
 import streamlit as st
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -22,7 +23,27 @@ st.set_page_config(page_title="Suivi des cours d'eau",
                    page_icon="🐟", layout="wide")
 
 TITRES = {c: cls.libelle for c, cls in SOURCES.items()}
-DEFAUTS = {"code_commune": "42218", "cours_eau": "la loire"}
+DEFAUTS = {"nom_commune": "Saint-Étienne", "cours_eau": "la loire"}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def cherche_communes(nom: str) -> list[tuple[str, str, str]]:
+    """Autocomplétion des communes via GéoAPI (API officielle de l'État).
+    Retourne [(code INSEE, nom, département), ...]."""
+    if len(nom.strip()) < 2:
+        return []
+    try:
+        rep = requests.get(
+            "https://geo.api.gouv.fr/communes",
+            params={"nom": nom.strip(), "limit": 10,
+                    "fields": "codeDepartement"},
+            timeout=10)
+        rep.raise_for_status()
+        return [(c["code"], c["nom"],
+                 f"{c.get('codeDepartement', '')} — {c['nom']} ({c['code']})")
+                for c in rep.json()]
+    except requests.RequestException:
+        return []
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -38,10 +59,19 @@ def filtres_communs() -> dict:
                     label_visibility="collapsed")
     filtres = {}
     if lieu == "Commune":
-        filtres["code_commune"] = st.text_input(
-            "Code INSEE de la commune", value=DEFAUTS["code_commune"],
-            help="Code à 5 chiffres, ex. 42218 pour Saint-Étienne. "
-                 "Trouvable sur data.gouv.fr ou Wikipédia.")
+        saisie = st.text_input("Nom de la commune",
+                               value=DEFAUTS["nom_commune"])
+        communes = cherche_communes(saisie)
+        if not communes:
+            if len(saisie.strip()) >= 2:
+                st.warning("Commune introuvable — vérifiez l'orthographe.")
+            return None
+        _, _, etiquette = st.radio(
+            "Communes trouvées", communes,
+            format_func=lambda c: c[2], label_visibility="collapsed")
+        filtres["code_commune"] = etiquette[0]
+        filtres["nom_commune"] = etiquette[1]
+        st.caption(f"✓ Commune sélectionnée : {etiquette[1]}")
     else:
         filtres["code_cours_eau"] = st.text_input(
             "Nom du cours d'eau", value=DEFAUTS["cours_eau"],
@@ -64,6 +94,11 @@ def main() -> None:
 
     with st.sidebar:
         filtres = filtres_communs()
+
+    if not filtres:
+        st.info("Tapez le nom d'une commune ou d'un cours d'eau dans la "
+                "barre latérale pour commencer.")
+        return
 
     sources_ok = []
     echecs = []
