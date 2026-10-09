@@ -66,7 +66,7 @@ class CollecteurBase(ABC):
         for tentative in range(1, config.RETRIES + 1):
             try:
                 rep = self.session.get(url, params=params, timeout=30)
-                if rep.status_code == 200:
+                if rep.status_code in (200, 206):
                     return rep.json()
                 if rep.status_code in (429, 500, 502, 503):
                     time.sleep(config.PAUSE_RETRIE_S * tentative)
