@@ -60,6 +60,8 @@ class CollecteurDebits(CollecteurBase):
                 stations.append(df)
         df_stations = (pd.concat(stations, ignore_index=True) if stations
                        else pd.DataFrame())
+        if df_stations.empty:
+            return pd.DataFrame(), pd.DataFrame()
 
         mesures = []
         params_obs = {"fields": "code_station,grandeur_hydro,date_obs_elab,"
