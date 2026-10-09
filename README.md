@@ -1,62 +1,51 @@
-# Suivi environnemental — Hub'Eau
+# Suivi des cours d'eau 🐟
 
-Application de suivi environnemental des stations de mesure françaises, interrogeant les bases de données de l'État via le portail [Hub'Eau](https://hubeau.eaufrance.fr) (APIs publiques, sans clé).
+Appli web de suivi environnemental basée sur les données officielles françaises
+([Hub'Eau](https://hubeau.eaufrance.fr)) :
 
-Fonctionne à l'identique sur **Windows** et **Linux**.
+- **Débits** — API Hydrométrie (HYDRO / Vigicrues)
+- **Poissons** — API Poisson / État piscicole (base ASPE, OFB)
+- **Qualité des eaux** — API Qualité des cours d'eau (Naïades : nitrates, phosphore, métaux…)
 
-## Fonctionnalités
+Accessible depuis n'importe quel appareil (PC, tablette, smartphone) via un
+navigateur — aucune installation nécessaire.
 
-- 🔍 Recherche de stations de suivi (par commune, département, cours d'eau ou autour d'un point GPS)
-- 📊 Graphique temporel interactif multi-paramètres (nitrates, chlorures, MES, etc.)
-- 📋 Statistiques descriptives par paramètre (nombre, moyenne, min, max)
-- 🗂️ Tableau de données brutes avec export CSV (compatible Excel)
-- ⚙️ CLI pour l'automatisation (cron / Planificateur de tâches Windows)
+## Déploiement en ligne (Streamlit Cloud)
 
-## Installation (Windows et Linux)
+1. Créer un compte sur [share.streamlit.io](https://share.streamlit.io)
+   avec votre compte GitHub
+2. « New app » → dépôt `hubeau_suivi`, branche `main`,
+   fichier `dashboard/app.py`
+3. L'appli est publiée sur `https://<votre-app>.streamlit.app`
 
-Prérequis : [Python 3.10+](https://www.python.org/downloads/) (sous Windows, cocher « Add Python to PATH » à l'installation).
+## Utilisation locale (optionnelle)
 
 ```bash
-# Dans le dossier du projet
 pip install -r requirements.txt
+streamlit run dashboard/app.py
 ```
 
-## Utilisation — application web locale
+Collecte programmée vers SQLite (pour historisation locale) :
 
 ```bash
-streamlit run app.py
+python -m suivi_eau.collect --commune 42218 --all
+python -m suivi_eau.collect --cours-eau "la loire" --poissons --qualite
 ```
 
-L'interface s'ouvre automatiquement dans le navigateur à l'adresse `http://localhost:8501`.
+## Structure
 
-1. Panneau de gauche : chercher une station (ex. commune « Longuyon »)
-2. Choisir la station, la période et les paramètres
-3. Cliquer « 🚀 Générer l'analyse » → graphique, statistiques et exports CSV
-
-## Utilisation — ligne de commande (automatisation)
-
-```bash
-# Chercher des stations
-python hubeau_cli.py stations --commune Longuyon
-
-# Rapport CSV + PNG pour une station
-python hubeau_cli.py rapport --station 01057000 --parametres "Nitrates,Chlorures" --depuis 2020-01-01
+```
+├── dashboard/app.py         # appli web Streamlit
+├── suivi_eau/
+│   ├── collect.py          # CLI de collecte
+│   ├── collecteurs/        # débits, poissons, qualité (+ base extensible)
+│   ├── db.py               # stockage SQLite
+│   └── config.py
+└── tests/
 ```
 
-Automatisation :
-- **Windows** : Planificateur de tâches → `python hubeau_cli.py rapport --station ...`
-- **Linux** : cron → `0 6 * * 1 cd /chemin/hubeau-suivi && python3 hubeau_cli.py rapport ...`
+## Ajouter une source de données
 
-## Structure du projet
-
-- `app.py` — application web Streamlit (recherche stations, graphique Plotly, exports)
-- `hubeau_api.py` — client Hub'Eau avec pagination, reprise sur erreur et cache
-- `hubeau_cli.py` — outil en ligne de commande (stations, analyses, rapport CSV+PNG)
-- `requirements.txt` — dépendances
-
-## Données
-
-- Source : base Naïades (qualité physico-chimique des cours d'eau), Agences de l'Eau
-- API : `GET https://hubeau.eaufrance.fr/api/v2/qualite_rivieres/{station_pc,analyse_pc}`
-- Documentation : <https://hubeau.eaufrance.fr/page/api-qualite-cours-deau>
-- Licence : données publiques, réutilisation libre (licence Etalab)
+Créer `suivi_eau/collecteurs/<nom>.py` héritant de `CollecteurBase`
+(`endpoints()` + `transforme()`), puis l'enregistrer dans
+`suivi_eau/collecteurs/__init__.py`.
