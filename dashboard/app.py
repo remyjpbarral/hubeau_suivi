@@ -90,8 +90,10 @@ def filtres_communs() -> dict:
                     label_visibility="collapsed")
     filtres = {}
     if lieu == "Commune":
+        if "saisie_commune" not in st.session_state:
+            st.session_state["saisie_commune"] = DEFAUTS["nom_commune"]
         saisie = st.text_input("Nom de la commune",
-                               value=DEFAUTS["nom_commune"])
+                               key="saisie_commune")
         communes = cherche_communes(saisie)
         if not communes:
             if len(saisie.strip()) >= 2:
