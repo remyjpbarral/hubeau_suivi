@@ -12,7 +12,7 @@ CHEMIN_DB = RACINE / "data" / "suivi_eau.sqlite"
 BASE_HUBEAU = "https://hubeau.eaufrance.fr/api"
 
 # Pagination
-TAILLE_PAGE = 200          # éléments par requête (max API : 200)
+TAILLE_PAGE = 2000         # éléments par requête (les API acceptent de grandes pages)
 MAX_PAGES = 50             # garde-fou anti-boucle
 RETRIES = 3                # tentatives par requête
 PAUSE_RETRIE_S = 2         # délai entre tentatives

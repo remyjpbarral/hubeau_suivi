@@ -57,25 +57,21 @@ BRUT_DEBIT = {
 
 
 class TestPoissons(unittest.TestCase):
-    def test_collecte_transformations(self):
+    def test_obs_station_rows(self):
         c = CollecteurPoissons()
-        obs, stations = [], []
-        chemin, params = c.endpoints(code_station="05001800")[0]
-        self.assertIn("etat_piscicole", chemin)
-        for d in BRUT_POISSON["data"]:
-            obs.append({"code_station": d["code_station"],
-                        "date": d["date_operation"],
-                        "parametre": d["nom_commun_taxon"],
-                        "valeur": d["taille_individu"],
-                        "unite": "mm",
-                        "meta": "{}"})
-            stations.append({"code_station": d["code_station"],
-                              "libelle": d["libelle_station"]})
-        df_obs = pd.DataFrame(obs)
-        df_st = pd.DataFrame(stations).drop_duplicates("code_station")
-        self.assertEqual(df_obs.iloc[0]["parametre"], "gardon")
-        self.assertEqual(df_obs.iloc[0]["valeur"], 180)
-        self.assertEqual(len(df_st), 1)
+        d = BRUT_POISSON["data"][0]
+        row = c._obs_row(d)
+        self.assertEqual(row["parametre"], "gardon")
+        self.assertEqual(row["valeur"], 180)
+        self.assertEqual(row["unite"], "mm")
+        self.assertIsNone(c._obs_row({"date_operation": None}))
+
+    def test_station_row(self):
+        c = CollecteurPoissons()
+        d = BRUT_POISSON["data"][0]
+        row = c._station_row(d)
+        self.assertEqual(row["code_station"], "05001800")
+        self.assertEqual(row["libelle"], "LA LOIRE A SAINT-ETIENNE")
 
 
 class TestQualite(unittest.TestCase):

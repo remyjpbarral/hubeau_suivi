@@ -11,7 +11,8 @@ import pandas as pd
 
 from .base import CollecteurBase
 
-# Paramètres physico-chimiques les plus suivis (codes SANDRE)
+# Paramètres physico-chimiques les plus suivis (codes SANDRE) — pour
+# limiter le volume téléchargé et garder le dashboard réactif.
 PARAMETRES_SURVEILLES = {
     "1340": "Nitrates",
     "1335": "Nitrites",
@@ -24,6 +25,9 @@ PARAMETRES_SURVEILLES = {
     "1720": "Conductivité",
     "1362": "Orthophosphates",
 }
+
+# codes acceptés en filtre (l'API analyse_pc accepte code_parametre multiple)
+CODES_PARAMETRES = ",".join(PARAMETRES_SURVEILLES.keys())
 
 
 class CollecteurQualite(CollecteurBase):
@@ -58,9 +62,16 @@ class CollecteurQualite(CollecteurBase):
 
     def collecte(self, code_cours_eau=None, code_commune=None, **filtres):
         # 1) stations filtrées par commune/cours d'eau
-        chemin_st, params_st = self.endpoints(code_cours_eau=code_cours_eau,
-                                              code_commune=code_commune,
-                                              **filtres)[0]
+        params_st = {"fields": "code_station,libelle_station,nom_cours_eau,"
+                                   "code_commune,libelle_commune,longitude,latitude,uri_station",
+                     "size": 200}
+        if code_commune:
+            params_st["code_commune"] = code_commune
+        elif code_cours_eau:
+            params_st["nom_cours_eau"] = code_cours_eau
+        elif filtres.get("code_station"):
+            params_st["code_station"] = filtres["code_station"]
+        chemin_st = "/v2/qualite_rivieres/station_pc"
         stations = []
         for page in self._pages(chemin_st, params_st):
             df = self._stations_df(page)
@@ -69,14 +80,15 @@ class CollecteurQualite(CollecteurBase):
         df_stations = (pd.concat(stations, ignore_index=True)
                        .drop_duplicates("code_station") if stations else pd.DataFrame())
 
-        # 2) analyses station par station
+        # 2) analyses station par station (max 10 pour rester rapide)
         analyses = []
         chemin_an = "/v2/qualite_rivieres/analyse_pc"
-        codes = (df_stations["code_station"].tolist()[:50]
+        codes = (df_stations["code_station"].tolist()[:10]
                  if not df_stations.empty else
                  ([filtres["code_station"]] if filtres.get("code_station") else []))
         for code in codes:
-            params = {"code_station": code,
+            params = {"code_station": code, "size": 2000,
+                      "code_parametre": CODES_PARAMETRES,
                       "fields": ("code_station,date_prelevement,code_parametre,"
                                  "libelle_parametre,resultat,valeur_equiv_parametre,"
                                  "symbole_unite,code_qualification,libelle_qualification")}
