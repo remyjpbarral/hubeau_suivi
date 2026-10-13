@@ -28,7 +28,7 @@ public class MainActivity extends AppCompatActivity {
     private static final long DAY = 24 * HOUR;
 
     static final long[] PERIODS = {6 * HOUR, 24 * HOUR, 7 * DAY, 30 * DAY, 365 * DAY};
-    static final boolean[] TEMPS_REEL = {true, true, true, true, false};
+    static final boolean[] TEMPS_REEL = {true, true, false, false, false};
     static final String[] PERIOD_LABELS = {
             "6 heures", "24 heures", "7 jours", "30 jours", "12 mois"
     };

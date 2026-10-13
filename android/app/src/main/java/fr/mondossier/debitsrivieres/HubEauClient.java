@@ -179,7 +179,7 @@ public final class HubEauClient {
                 + "&grandeur_hydro=Q"
                 + "&date_debut_obs=" + fmt.format(new Date(startMs))
                 + "&date_fin_obs=" + fmt.format(new Date(endMs))
-                + "&size=5000&format=json&sort=asc&timestep=60";
+                + "&size=5000&format=json&sort=asc";
         List<Observation> list = parseObservationsTr(url);
         // le temps réel ne maintient qu'un mois d'historique : complément par débits moyens journaliers si vide
         if (list.isEmpty() && endMs - startMs > 24L * 3600_000L) {
@@ -208,6 +208,7 @@ public final class HubEauClient {
                     isoDate().parse(o.optString("date_obs_elab", "")).getTime(),
                     (float) (lps / 1000.0)));
         }
+        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
         return list;
     }
 
@@ -231,6 +232,7 @@ public final class HubEauClient {
             }
             if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
         }
+        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
         return list;
     }
 }
