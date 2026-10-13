@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService warmExecutor = Executors.newSingleThreadExecutor();
     final List<HubEauClient.Station> stations = new ArrayList<>();
     private final List<HubEauClient.Station> allStations = new ArrayList<>();
     final Map<String, List<HubEauClient.Observation>> series = new LinkedHashMap<>();
@@ -169,21 +170,32 @@ public class MainActivity extends AppCompatActivity {
         statusText = getString(R.string.loading);
         if (chartFragment != null) chartFragment.refreshDisplay();
         runInBackground(() -> {
+            List<HubEauClient.Observation> obs = null;
+            Exception lastError = null;
+            for (int attempt = 0; attempt < 2 && obs == null; attempt++) {
+                try {
+                    obs = tr
+                            ? HubEauClient.fetchDebitsTempsReel(code, start, now)
+                            : HubEauClient.fetchDebitsJournaliers(code, start, now);
+                } catch (Exception e) {
+                    lastError = e;
+                }
+            }
             try {
-                List<HubEauClient.Observation> obs = tr
-                        ? HubEauClient.fetchDebitsTempsReel(code, start, now)
-                        : HubEauClient.fetchDebitsJournaliers(code, start, now);
+                if (obs == null) throw lastError != null ? lastError : new RuntimeException("pas de données");
                 DebitCache.put(code, obs);
+                final List<HubEauClient.Observation> result = obs;
                 runOnUiThread(() -> {
                     series.clear();
-                    series.put(currentStation.libelle, obs);
-                    statusText = obs.isEmpty() ? getString(R.string.no_data) : "";
+                    series.put(currentStation.libelle, result);
+                    statusText = result.isEmpty() ? getString(R.string.no_data) : "";
                     if (chartFragment != null) chartFragment.refreshDisplay();
                 });
             } catch (Exception e) {
+                final Exception err = e;
                 runOnUiThread(() -> {
-                    statusText = getString(R.string.error_api) + " : " + e.getMessage();
-                    if (searchFragment != null) searchFragment.refreshDisplay();
+                    statusText = getString(R.string.error_api) + " : " + err.getMessage();
+                    if (chartFragment != null) chartFragment.refreshDisplay();
                 });
             }
         });
@@ -239,12 +251,12 @@ public class MainActivity extends AppCompatActivity {
         List<HubEauClient.Station> todo = new ArrayList<>();
         for (HubEauClient.Station s : stations) {
             if (DebitCache.getFresh(s.code) == null) todo.add(s);
-            if (todo.size() >= 15) break;
+            if (todo.size() >= 8) break;
         }
         if (todo.isEmpty()) return;
         final long period = PERIODS[selectedPeriod];
         final boolean tr = TEMPS_REEL[selectedPeriod];
-        executor.execute(() -> {
+        warmExecutor.execute(() -> {
             for (HubEauClient.Station s : todo) {
                 try {
                     long now = System.currentTimeMillis();
@@ -267,7 +279,7 @@ public class MainActivity extends AppCompatActivity {
             if (!dup) targets.add(s);
         }
         if (targets.isEmpty()) return;
-        DebitCache.warmup(targets, executor, PERIODS[selectedPeriod], TEMPS_REEL[selectedPeriod]);
+        DebitCache.warmup(targets, warmExecutor, PERIODS[selectedPeriod], TEMPS_REEL[selectedPeriod]);
     }
 
     void runInBackground(Runnable r) {
@@ -278,5 +290,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         executor.shutdownNow();
+        warmExecutor.shutdownNow();
     }
 }

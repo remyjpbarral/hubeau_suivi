@@ -63,8 +63,8 @@ public final class HubEauClient {
         URL url = new URL(urlString);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
         c.setRequestProperty("User-Agent", UA);
-        c.setConnectTimeout(15000);
-        c.setReadTimeout(30000);
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(45000);
         try {
             int code = c.getResponseCode();
             BufferedReader reader = new BufferedReader(new InputStreamReader(
@@ -179,7 +179,7 @@ public final class HubEauClient {
                 + "&grandeur_hydro=Q"
                 + "&date_debut_obs=" + fmt.format(new Date(startMs))
                 + "&date_fin_obs=" + fmt.format(new Date(endMs))
-                + "&size=20000&format=json&sort=asc";
+                + "&size=5000&format=json&sort=asc&timestep=60";
         List<Observation> list = parseObservationsTr(url);
         // le temps réel ne maintient qu'un mois d'historique : complément par débits moyens journaliers si vide
         if (list.isEmpty() && endMs - startMs > 24L * 3600_000L) {
