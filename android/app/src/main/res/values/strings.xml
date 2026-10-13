@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Débits Rivières</string>
+    <string name="tab_search">Recherche</string>
+    <string name="tab_map">Carte</string>
+    <string name="tab_chart">Courbe</string>
+    <string name="tab_favorites">Favoris</string>
+    <string name="search_hint">Station ou cours d\'eau…</string>
+    <string name="period_label">Pas de temps :</string>
+    <string name="btn_refresh">Actualiser</string>
+    <string name="loading">Chargement…</string>
+    <string name="no_results">Aucune station trouvée</string>
+    <string name="error_api">Erreur de connexion à l\'API HubEau</string>
+    <string name="no_data">Aucune donnée de débit pour cette station et cette période</string>
+    <string name="favorites_empty">Aucun favori.\nAppuyez longuement sur une station\n(ou l\'icône ★ sur la fiche)\npour l\'ajouter ici.</string>
+    <string name="pick_station_hint">Sélectionnez une station pour afficher ses débits</string>
+    <string name="disclaimer">Données : API HubEau / hydrométrie – SANDRE (Ministère en charge de l\'écologie, Eau France). Fond de carte © OpenStreetMap. Conditions d\'utilisation : https://hubeau.eaufrance.fr/page/conditions-dutilisation</string>
+</resources>

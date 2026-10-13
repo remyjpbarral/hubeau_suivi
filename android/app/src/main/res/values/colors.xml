@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="blue_water">#1565C0</color>
+    <color name="blue_dark">#0D47A1</color>
+    <color name="blue_light">#E3F2FD</color>
+    <color name="white">#FFFFFF</color>
+    <color name="chip_bg">#E3F2FD</color>
+    <color name="text_secondary">#546E7A</color>
+</resources>

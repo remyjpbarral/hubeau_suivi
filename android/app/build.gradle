@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'fr.mondossier.debitsrivieres'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "fr.mondossier.debitsrivieres"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'org.osmdroid:osmdroid-android:6.1.18'
+}
+
+android {
+    signingConfigs {
+        release {
+            storeFile rootProject.file('release.keystore')
+            storePassword System.getenv('KSTORE_PWD') ?: 'debits2024'
+            keyAlias 'debitsrivieres'
+            keyPassword System.getenv('KEY_PWD') ?: 'debits2024'
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+}
