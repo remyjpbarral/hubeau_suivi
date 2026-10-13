@@ -111,14 +111,24 @@ public class MainActivity extends AppCompatActivity {
 
         loadReferentiel();
         warmupFavoritesAndRecent();
-        String lastCrash = CrashLogger.last(this);
-        if (!lastCrash.isEmpty()) {
-            new androidx.appcompat.app.AlertDialog.Builder(this)
-                    .setTitle("Plantage précédent détecté")
-                    .setMessage(lastCrash.length() > 1500 ? lastCrash.substring(0, 1500) : lastCrash)
-                    .setPositiveButton("Fermer", null)
-                    .show();
-        }
+        showCrashReportIfAny();
+    }
+
+    private void showCrashReportIfAny() {
+        final String lastCrash = CrashLogger.last(this);
+        if (lastCrash.isEmpty()) return;
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Plantage précédent détecté")
+                .setMessage(lastCrash.length() > 3000 ? lastCrash.substring(0, 3000) : lastCrash)
+                .setPositiveButton("Fermer", null)
+                .setNeutralButton("Partager", (dialog, which) -> {
+                    android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    i.setType("text/plain");
+                    i.putExtra(android.content.Intent.EXTRA_SUBJECT, "Trace de plantage Débits Rivières");
+                    i.putExtra(android.content.Intent.EXTRA_TEXT, lastCrash);
+                    startActivity(android.content.Intent.createChooser(i, "Partager la trace"));
+                })
+                .show();
     }
 
     void registerSearch(SearchFragment f) {
