@@ -49,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ViewPager2 pager;
     private SearchFragment searchFragment;
+    private ChartFragment chartFragment;
     private MapFragment mapFragment;
     private FavoritesFragment favoritesFragment;
 
@@ -64,6 +65,8 @@ public class MainActivity extends AppCompatActivity {
                 case 0:
                     return new SearchFragment();
                 case 1:
+                    return new ChartFragment();
+                case 2:
                     return new MapFragment();
                 default:
                     return new FavoritesFragment();
@@ -72,7 +75,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public int getItemCount() {
-            return 3;
+            return 4;
         }
     }
 
@@ -92,12 +95,14 @@ public class MainActivity extends AppCompatActivity {
 
         pager = findViewById(R.id.pager);
         pager.setAdapter(new TabsAdapter(this));
-        pager.setOffscreenPageLimit(3);
+        pager.setOffscreenPageLimit(4);
+        pager.setUserInputEnabled(false);
 
         TabLayout tabs = findViewById(R.id.tabs);
         new TabLayoutMediator(tabs, pager, (tab, position) -> {
             if (position == 0) tab.setText(R.string.tab_search);
-            else if (position == 1) tab.setText(R.string.tab_map);
+            else if (position == 1) tab.setText(R.string.tab_chart);
+            else if (position == 2) tab.setText(R.string.tab_map);
             else tab.setText(R.string.tab_favorites);
         }).attach();
 
@@ -106,6 +111,11 @@ public class MainActivity extends AppCompatActivity {
 
     void registerSearch(SearchFragment f) {
         this.searchFragment = f;
+        f.refreshDisplay();
+    }
+
+    void registerChart(ChartFragment f) {
+        this.chartFragment = f;
         f.refreshDisplay();
     }
 
@@ -122,6 +132,10 @@ public class MainActivity extends AppCompatActivity {
         pager.setCurrentItem(0);
     }
 
+    void goToChart() {
+        pager.setCurrentItem(1);
+    }
+
     void goToMap() {
         pager.setCurrentItem(1);
     }
@@ -130,7 +144,9 @@ public class MainActivity extends AppCompatActivity {
         currentStation = s;
         statusText = "";
         if (searchFragment != null) searchFragment.refreshDisplay();
+        if (chartFragment != null) chartFragment.refreshDisplay();
         if (mapFragment != null && s.lat != null) mapFragment.focusStation(s);
+        goToChart();
         loadDebits();
     }
 

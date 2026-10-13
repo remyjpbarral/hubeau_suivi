@@ -11,8 +11,6 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.ListView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,9 +25,7 @@ public class SearchFragment extends Fragment implements StationListener {
     private AutoCompleteTextView searchInput;
     private TextView stationInfo;
     private TextView statusText;
-    private ChartView chart;
     private Button favToggle;
-    private Spinner periodSpinner;
 
     private final Handler debounceHandler = new Handler(Looper.getMainLooper());
     private final Runnable debounceRunnable = this::runAutocomplete;
@@ -48,33 +44,7 @@ public class SearchFragment extends Fragment implements StationListener {
         searchInput = v.findViewById(R.id.search_input);
         stationInfo = v.findViewById(R.id.station_info);
         statusText = v.findViewById(R.id.status_text);
-        chart = v.findViewById(R.id.chart);
         favToggle = v.findViewById(R.id.fav_toggle_button);
-        periodSpinner = v.findViewById(R.id.period_spinner);
-        Button refreshButton = v.findViewById(R.id.refresh_button);
-
-        ArrayAdapter<String> periodAdapter = new ArrayAdapter<>(requireContext(),
-                android.R.layout.simple_spinner_item, MainActivity.PERIOD_LABELS);
-        periodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        periodSpinner.setAdapter(periodAdapter);
-        periodSpinner.setSelection(activity() != null ? activity().selectedPeriod : 1);
-        periodSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int pos, long id) {
-                if (activity() != null) {
-                    activity().selectedPeriod = pos;
-                    activity().loadDebits();
-                }
-            }
-
-            @Override
-            public void onNothingSelected(android.widget.AdapterView<?> parent) {
-            }
-        });
-
-        refreshButton.setOnClickListener(btn -> {
-            if (activity() != null) activity().loadDebits();
-        });
 
         favToggle.setOnClickListener(btn -> {
             MainActivity a = activity();
@@ -121,6 +91,7 @@ public class SearchFragment extends Fragment implements StationListener {
                 }
             });
         }
+
         MainActivity a0 = activity();
         if (a0 != null) a0.registerSearch(this);
     }
@@ -156,9 +127,6 @@ public class SearchFragment extends Fragment implements StationListener {
             stationInfo.setText(a.currentStation.display());
             updateFavButton();
         }
-        chart.setSeries(a.series);
-        statusText.setText(a.statusText);
-        periodSpinner.setSelection(a.selectedPeriod);
     }
 
     @Override

@@ -3,6 +3,7 @@
     <string name="app_name">Débits Rivières</string>
     <string name="tab_search">Recherche</string>
     <string name="tab_map">Carte</string>
+    <string name="tab_chart">Courbe</string>
     <string name="tab_favorites">Favoris</string>
     <string name="search_hint">Station ou cours d\'eau…</string>
     <string name="period_label">Pas de temps :</string>
