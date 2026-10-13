@@ -1,6 +1,8 @@
 package fr.mondossier.debitsrivieres;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -48,6 +50,9 @@ public class MainActivity extends AppCompatActivity {
     private Button favToggle;
     private ArrayAdapter<String> stationAdapter;
     private ArrayAdapter<String> autocompleteAdapter;
+
+    private final Handler debounceHandler = new Handler(Looper.getMainLooper());
+    private final Runnable debounceRunnable = this::runAutocomplete;
 
     private HubEauClient.Station currentStation = null;
     private int selectedPeriod = 1;
@@ -127,8 +132,10 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                String q = s.toString().trim();
-                if (q.length() >= 3) autocomplete(q);
+                debounceHandler.removeCallbacks(debounceRunnable);
+                if (s.toString().trim().length() >= 2) {
+                    debounceHandler.postDelayed(debounceRunnable, 150);
+                }
             }
         });
 
@@ -137,41 +144,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadReferentiel() {
+        List<HubEauClient.Station> bundled = StationCache.loadBundled(MainActivity.this);
+        List<HubEauClient.Station> cached = StationCache.load(MainActivity.this);
+        if (cached.isEmpty()) cached = bundled;
+        final List<HubEauClient.Station> source = cached;
+        if (!cached.isEmpty()) {
+            allStations.clear();
+            allStations.addAll(cached);
+            stations.clear();
+            stations.addAll(StationCache.filter(allStations, ""));
+            statusText.setText("");
+        }
+        if (!source.isEmpty() && StationCache.isFresh(MainActivity.this)) return;
         runInBackground(() -> {
-            List<HubEauClient.Station> cached = StationCache.load(MainActivity.this);
-            if (!cached.isEmpty() && StationCache.isFresh(MainActivity.this)) {
-                runOnUiThread(() -> {
-                    allStations.clear();
-                    allStations.addAll(cached);
-                    stations.clear();
-                    stations.addAll(StationCache.filter(allStations, ""));
-                    statusText.setText("");
-                    if (stations.isEmpty()) statusText.setText(R.string.no_results);
-                });
-                return;
-            }
             try {
                 List<HubEauClient.Station> all = HubEauClient.fetchAllStations();
                 StationCache.save(MainActivity.this, all);
                 runOnUiThread(() -> {
                     allStations.clear();
                     allStations.addAll(all);
-                    stations.clear();
-                    stations.addAll(StationCache.filter(allStations, ""));
                     statusText.setText("");
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> {
-                    if (!cached.isEmpty()) {
-                        allStations.clear();
-                        allStations.addAll(cached);
-                        stations.clear();
-                        stations.addAll(StationCache.filter(allStations, ""));
-                        statusText.setText("");
-                    } else {
-                        showError(getString(R.string.error_api) + " : " + e.getMessage());
-                    }
-                });
+                if (source.isEmpty()) {
+                    runOnUiThread(() -> showError(getString(R.string.error_api) + " : " + e.getMessage()));
+                }
             }
         });
     }
@@ -181,6 +178,10 @@ public class MainActivity extends AppCompatActivity {
             if (s.display().equals(label)) return s;
         }
         return null;
+    }
+
+    private void runAutocomplete() {
+        autocomplete(searchInput.getText().toString());
     }
 
     private void autocomplete(String query) {

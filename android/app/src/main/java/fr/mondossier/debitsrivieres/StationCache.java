@@ -3,6 +3,9 @@ package fr.mondossier.debitsrivieres;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -80,6 +83,26 @@ public final class StationCache {
         out.addAll(contains);
         if (out.size() > 30) return new ArrayList<>(out.subList(0, 30));
         return out;
+    }
+
+    public static List<HubEauClient.Station> loadBundled(Context c) {
+        List<HubEauClient.Station> result = new ArrayList<>();
+        try {
+            InputStream is = c.getAssets().open("referentiel_stations.json");
+            byte[] buf = new byte[is.available()];
+            is.read(buf);
+            is.close();
+            JSONArray arr = new JSONArray(new String(buf, StandardCharsets.UTF_8));
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.getJSONObject(i);
+                result.add(new HubEauClient.Station(
+                        o.getString("code"),
+                        o.getString("libelle"),
+                        o.optString("coursEau", null)));
+            }
+        } catch (Exception ignored) {
+        }
+        return result;
     }
 
     public static String normalize(String s) {
