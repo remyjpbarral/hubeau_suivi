@@ -37,6 +37,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final List<HubEauClient.Station> stations = new ArrayList<>();
+    private final List<HubEauClient.Station> allStations = new ArrayList<>();
     private final Map<String, List<HubEauClient.Observation>> series = new LinkedHashMap<>();
 
     private AutoCompleteTextView searchInput;
@@ -132,7 +133,47 @@ public class MainActivity extends AppCompatActivity {
         });
 
         statusText.setText(R.string.loading);
-        searchStations("");
+        loadReferentiel();
+    }
+
+    private void loadReferentiel() {
+        runInBackground(() -> {
+            List<HubEauClient.Station> cached = StationCache.load(MainActivity.this);
+            if (!cached.isEmpty() && StationCache.isFresh(MainActivity.this)) {
+                runOnUiThread(() -> {
+                    allStations.clear();
+                    allStations.addAll(cached);
+                    stations.clear();
+                    stations.addAll(StationCache.filter(allStations, ""));
+                    statusText.setText("");
+                    if (stations.isEmpty()) statusText.setText(R.string.no_results);
+                });
+                return;
+            }
+            try {
+                List<HubEauClient.Station> all = HubEauClient.fetchAllStations();
+                StationCache.save(MainActivity.this, all);
+                runOnUiThread(() -> {
+                    allStations.clear();
+                    allStations.addAll(all);
+                    stations.clear();
+                    stations.addAll(StationCache.filter(allStations, ""));
+                    statusText.setText("");
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (!cached.isEmpty()) {
+                        allStations.clear();
+                        allStations.addAll(cached);
+                        stations.clear();
+                        stations.addAll(StationCache.filter(allStations, ""));
+                        statusText.setText("");
+                    } else {
+                        showError(getString(R.string.error_api) + " : " + e.getMessage());
+                    }
+                });
+            }
+        });
     }
 
     private HubEauClient.Station stationByLabel(String label) {
@@ -143,50 +184,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void autocomplete(String query) {
-        runInBackground(() -> {
-            try {
-                List<HubEauClient.Station> found = HubEauClient.searchStationsAny(query);
-                runOnUiThread(() -> {
-                    if (!searchInput.getText().toString().trim().equals(query)) return;
-                    stations.clear();
-                    stations.addAll(found);
-                    List<String> labels = new ArrayList<>();
-                    for (HubEauClient.Station s : found) labels.add(s.display());
-                    autocompleteAdapter.clear();
-                    autocompleteAdapter.addAll(labels);
-                    if (searchInput.isFocused() && labels.size() > 0
-                            && !searchInput.isPerformingCompletion()) {
-                        autocompleteAdapter.getFilter().filter(null);
-                        searchInput.showDropDown();
-                    }
-                });
-            } catch (Exception ignored) {
-            }
-        });
+        if (allStations.isEmpty()) return;
+        List<HubEauClient.Station> found = StationCache.filter(allStations, query);
+        stations.clear();
+        stations.addAll(found);
+        List<String> labels = new ArrayList<>();
+        for (HubEauClient.Station s : found) labels.add(s.display());
+        autocompleteAdapter.clear();
+        autocompleteAdapter.addAll(labels);
+        if (searchInput.isFocused() && !labels.isEmpty()
+                && !searchInput.isPerformingCompletion()) {
+            autocompleteAdapter.getFilter().filter(null);
+            searchInput.showDropDown();
+        }
     }
 
     private void searchStations(String query) {
-        statusText.setText(R.string.loading);
-        runInBackground(() -> {
-            try {
-                List<HubEauClient.Station> found = HubEauClient.searchStationsAny(query);
-                runOnUiThread(() -> {
-                    stations.clear();
-                    stations.addAll(found);
-                    if (found.isEmpty()) {
-                        currentStation = null;
-                        stationInfo.setText("");
-                        series.clear();
-                        chart.setSeries(series);
-                        statusText.setText(R.string.no_results);
-                    } else {
-                        showStationPicker();
-                    }
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> showError(getString(R.string.error_api) + " : " + e.getMessage()));
-            }
-        });
+        if (allStations.isEmpty()) {
+            statusText.setText(R.string.loading);
+            loadReferentiel();
+            return;
+        }
+        List<HubEauClient.Station> found = StationCache.filter(allStations, query);
+        stations.clear();
+        stations.addAll(found);
+        if (found.isEmpty()) {
+            currentStation = null;
+            stationInfo.setText("");
+            series.clear();
+            chart.setSeries(series);
+            statusText.setText(R.string.no_results);
+        } else {
+            showStationPicker();
+        }
     }
 
     private void showStationPicker() {

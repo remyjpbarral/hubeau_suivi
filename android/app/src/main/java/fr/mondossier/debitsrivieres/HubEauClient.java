@@ -154,6 +154,12 @@ public final class HubEauClient {
         return result;
     }
 
+    public static List<Station> fetchAllStations() throws Exception {
+        String url = BASE + "/referentiel/stations?en_service=true&size=5000&format=json"
+                + "&fields=code_station,libelle_station,libelle_cours_eau";
+        return parseStations(get(url));
+    }
+
     public static List<Observation> fetchDebitsTempsReel(String stationCode, long startMs, long endMs) throws Exception {
         SimpleDateFormat fmt = isoUtc();
         String url = BASE + "/observations_tr"
