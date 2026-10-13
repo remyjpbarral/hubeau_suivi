@@ -45,6 +45,8 @@ public class SearchFragment extends Fragment implements StationListener {
         stationInfo = v.findViewById(R.id.station_info);
         statusText = v.findViewById(R.id.status_text);
         favToggle = v.findViewById(R.id.fav_toggle_button);
+        Button diagButton = v.findViewById(R.id.diag_button);
+        diagButton.setOnClickListener(btn -> showDiagMenu());
 
         favToggle.setOnClickListener(btn -> {
             MainActivity a = activity();
@@ -94,6 +96,32 @@ public class SearchFragment extends Fragment implements StationListener {
 
         MainActivity a0 = activity();
         if (a0 != null) a0.registerSearch(this);
+    }
+
+    private void showDiagMenu() {
+        final String[] items = {"Signaler le dernier plantage (partager)", "Effacer les plantages enregistrés"};
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Diagnostic")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        String trace = CrashLogger.last(requireContext());
+                        if (trace.isEmpty()) {
+                            android.widget.Toast.makeText(requireContext(),
+                                    "Aucun plantage enregistré 🙂", android.widget.Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                        i.setType("text/plain");
+                        i.putExtra(android.content.Intent.EXTRA_SUBJECT, "Trace de plantage Débits Rivières");
+                        i.putExtra(android.content.Intent.EXTRA_TEXT, trace);
+                        startActivity(android.content.Intent.createChooser(i, "Partager la trace"));
+                    } else {
+                        requireContext().getSharedPreferences("debits_crash", android.content.Context.MODE_PRIVATE)
+                                .edit().remove("last_crash").remove("prev_crash").apply();
+                        android.widget.Toast.makeText(requireContext(), "Plantages effacés", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .show();
     }
 
     private void runAutocomplete() {
