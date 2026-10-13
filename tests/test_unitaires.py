@@ -87,10 +87,18 @@ class TestQualite(unittest.TestCase):
 class TestDebits(unittest.TestCase):
     def test_mesures_df(self):
         c = CollecteurDebits()
-        df = c._mesures_df(BRUT_DEBIT)
+        # nouveau format : obs_elab (date_obs_elab / resultat_obs_elab)
+        brut = {"data": [{
+            "code_station": "O333402002",
+            "date_obs_elab": "2024-05-01",
+            "resultat_obs_elab": 5220.0,
+            "grandeur_hydro": "QmJ",
+        }]}
+        df = c._mesures_df(brut)
         self.assertEqual(len(df), 1)
-        self.assertEqual(df.iloc[0]["parametre"], "Q")
-        self.assertEqual(df.iloc[0]["valeur"], 142.5)
+        self.assertEqual(df.iloc[0]["parametre"], "Débit moyen journalier")
+        self.assertEqual(df.iloc[0]["valeur"], 5220.0)
+        self.assertEqual(df.iloc[0]["date"], "2024-05-01")
 
 
 class TestDB(unittest.TestCase):
