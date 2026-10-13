@@ -18,6 +18,7 @@ public class ChartFragment extends Fragment {
     private TextView status;
     private ChartView chart;
     private Spinner periodSpinner;
+    private Button refreshButton;
 
     private MainActivity activity() {
         return (MainActivity) getActivity();
@@ -34,7 +35,7 @@ public class ChartFragment extends Fragment {
         status = v.findViewById(R.id.chart_status);
         chart = v.findViewById(R.id.chart);
         periodSpinner = v.findViewById(R.id.period_spinner);
-        Button refreshButton = v.findViewById(R.id.refresh_button);
+        refreshButton = v.findViewById(R.id.refresh_button);
 
         ArrayAdapter<String> periodAdapter = new ArrayAdapter<>(requireContext(),
                 android.R.layout.simple_spinner_item, MainActivity.PERIOD_LABELS);
@@ -59,13 +60,20 @@ public class ChartFragment extends Fragment {
             if (activity() != null) activity().loadDebits();
         });
 
+        if (activity() != null && activity().isLoading) {
+            periodSpinner.setEnabled(false);
+        }
+
         MainActivity a = activity();
         if (a != null) a.registerChart(this);
     }
 
     public void refreshDisplay() {
         MainActivity a = activity();
-        if (a == null) return;
+        if (a == null || !isAdded()) return;
+        boolean loading = a.isLoading;
+        periodSpinner.setEnabled(!loading);
+        refreshButton.setEnabled(!loading);
         if (a.currentStation != null) {
             title.setText(a.currentStation.display());
         } else {

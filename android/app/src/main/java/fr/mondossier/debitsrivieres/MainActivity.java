@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     final Map<String, List<HubEauClient.Observation>> series = new LinkedHashMap<>();
     private final List<HubEauClient.Station> referentielForMap = new ArrayList<>();
 
+    public boolean isLoading = false;
     public HubEauClient.Station currentStation = null;
     public int selectedPeriod = 1;
     public CharSequence statusText = "";
@@ -110,6 +111,14 @@ public class MainActivity extends AppCompatActivity {
 
         loadReferentiel();
         warmupFavoritesAndRecent();
+        String lastCrash = CrashLogger.last(this);
+        if (!lastCrash.isEmpty()) {
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Plantage précédent détecté")
+                    .setMessage(lastCrash.length() > 1500 ? lastCrash.substring(0, 1500) : lastCrash)
+                    .setPositiveButton("Fermer", null)
+                    .show();
+        }
     }
 
     void registerSearch(SearchFragment f) {
@@ -147,9 +156,9 @@ public class MainActivity extends AppCompatActivity {
         currentStation = s;
         RecentStore.add(this, s);
         statusText = "";
-        if (searchFragment != null) searchFragment.refreshDisplay();
-        if (chartFragment != null) chartFragment.refreshDisplay();
-        if (mapFragment != null && s.lat != null) mapFragment.focusStation(s);
+        if (searchFragment != null && searchFragment.isAdded()) searchFragment.refreshDisplay();
+        if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
+        if (mapFragment != null && mapFragment.isAdded() && s.lat != null) mapFragment.focusStation(s);
         goToChart();
         loadDebits();
     }
@@ -165,11 +174,12 @@ public class MainActivity extends AppCompatActivity {
             series.clear();
             series.put(currentStation.libelle, cached);
             statusText = "";
-            if (chartFragment != null) chartFragment.refreshDisplay();
+            if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
             return;
         }
+        isLoading = true;
         statusText = getString(R.string.loading);
-        if (chartFragment != null) chartFragment.refreshDisplay();
+        if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
         runInBackground(() -> {
             List<HubEauClient.Observation> obs = null;
             Exception lastError = null;
@@ -188,18 +198,20 @@ public class MainActivity extends AppCompatActivity {
                 final String reason = finalError != null && finalError.getMessage() != null
                         ? finalError.getMessage() : "réseau indisponible";
                 runOnUiThread(() -> {
+                    isLoading = false;
                     statusText = getString(R.string.error_api) + " : " + reason;
-                    if (chartFragment != null) chartFragment.refreshDisplay();
+                    if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
                 });
                 return;
             }
             try {
                 DebitCache.put(code, result);
                 runOnUiThread(() -> {
+                    isLoading = false;
                     series.clear();
-                    series.put(currentStation.libelle, result);
+                    if (currentStation != null) series.put(currentStation.libelle, result);
                     statusText = result.isEmpty() ? getString(R.string.no_data) : "";
-                    if (chartFragment != null) chartFragment.refreshDisplay();
+                    if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
                 });
             } catch (Exception ignored) {
             }

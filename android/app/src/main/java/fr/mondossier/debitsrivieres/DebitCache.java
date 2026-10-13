@@ -1,7 +1,7 @@
 package fr.mondossier.debitsrivieres;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +21,7 @@ public final class DebitCache {
         }
     }
 
-    private static final Map<String, Entry> CACHE = new HashMap<>();
+    private static final Map<String, Entry> CACHE = new ConcurrentHashMap<>();
 
     private DebitCache() {
     }
