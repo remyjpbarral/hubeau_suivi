@@ -85,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         CrashLogger.install(this);
+        AnrWatchdog.install(this);
         try {
             org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DebitsRivieres/1.0");
             File base = new File(getCacheDir(), "osmdroid");
