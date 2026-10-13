@@ -39,6 +39,8 @@ public final class StationCache {
                 o.put("code", s.code);
                 o.put("libelle", s.libelle);
                 o.put("coursEau", s.coursEau == null ? "" : s.coursEau);
+                if (s.lat != null) o.put("lat", s.lat);
+                if (s.lon != null) o.put("lon", s.lon);
                 arr.put(o);
             } catch (Exception ignored) {
             }
@@ -58,7 +60,9 @@ public final class StationCache {
                 result.add(new HubEauClient.Station(
                         o.getString("code"),
                         o.getString("libelle"),
-                        o.optString("coursEau", null)));
+                        o.optString("coursEau", null),
+                        o.has("lat") && !o.isNull("lat") ? o.optDouble("lat") : null,
+                        o.has("lon") && !o.isNull("lon") ? o.optDouble("lon") : null));
             }
         } catch (Exception ignored) {
         }
@@ -98,7 +102,9 @@ public final class StationCache {
                 result.add(new HubEauClient.Station(
                         o.getString("code"),
                         o.getString("libelle"),
-                        o.optString("coursEau", null)));
+                        o.optString("coursEau", null),
+                        o.has("lat") && !o.isNull("lat") ? o.optDouble("lat") : null,
+                        o.has("lon") && !o.isNull("lon") ? o.optDouble("lon") : null));
             }
         } catch (Exception ignored) {
         }

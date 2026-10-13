@@ -24,11 +24,19 @@ public final class HubEauClient {
         public final String code;
         public final String libelle;
         public final String coursEau;
+        public final Double lat;
+        public final Double lon;
 
         Station(String code, String libelle, String coursEau) {
+            this(code, libelle, coursEau, null, null);
+        }
+
+        public Station(String code, String libelle, String coursEau, Double lat, Double lon) {
             this.code = code;
             this.libelle = libelle;
             this.coursEau = coursEau;
+            this.lat = lat;
+            this.lon = lon;
         }
 
         public String display() {
@@ -90,7 +98,7 @@ public final class HubEauClient {
         List<Station> result = new ArrayList<>();
         String q = query.trim();
         String params = "&en_service=true&size=30&format=json"
-                + "&fields=code_station,libelle_station,libelle_cours_eau";
+                + "&fields=code_station,libelle_station,libelle_cours_eau,longitude_station,latitude_station";
         if (!q.isEmpty()) {
             params += "&libelle_station=" + java.net.URLEncoder.encode(q, "UTF-8");
         }
@@ -102,7 +110,9 @@ public final class HubEauClient {
             result.add(new Station(
                     s.getString("code_station"),
                     s.optString("libelle_station", s.getString("code_station")),
-                    s.optString("libelle_cours_eau", null)));
+                    s.optString("libelle_cours_eau", null),
+                    s.has("latitude_station") && !s.isNull("latitude_station") ? s.optDouble("latitude_station") : null,
+                    s.has("longitude_station") && !s.isNull("longitude_station") ? s.optDouble("longitude_station") : null));
         }
         return result;
     }
@@ -149,14 +159,16 @@ public final class HubEauClient {
             result.add(new Station(
                     s.getString("code_station"),
                     s.optString("libelle_station", s.getString("code_station")),
-                    s.optString("libelle_cours_eau", null)));
+                    s.optString("libelle_cours_eau", null),
+                    s.has("latitude_station") && !s.isNull("latitude_station") ? s.optDouble("latitude_station") : null,
+                    s.has("longitude_station") && !s.isNull("longitude_station") ? s.optDouble("longitude_station") : null));
         }
         return result;
     }
 
     public static List<Station> fetchAllStations() throws Exception {
         String url = BASE + "/referentiel/stations?en_service=true&size=5000&format=json"
-                + "&fields=code_station,libelle_station,libelle_cours_eau";
+                + "&fields=code_station,libelle_station,libelle_cours_eau,longitude_station,latitude_station";
         return parseStations(get(url));
     }
 
