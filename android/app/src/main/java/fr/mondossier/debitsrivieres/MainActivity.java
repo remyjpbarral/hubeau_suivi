@@ -2,6 +2,8 @@ package fr.mondossier.debitsrivieres;
 
 import android.os.Bundle;
 
+import java.io.File;
+
 import androidx.annotation.NonNull;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -77,6 +79,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        try {
+            org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DebitsRivieres/1.0");
+            File base = new File(getCacheDir(), "osmdroid");
+            File tiles = new File(base, "tiles");
+            if (!tiles.exists()) tiles.mkdirs();
+            org.osmdroid.config.Configuration.getInstance().setOsmdroidBasePath(base);
+            org.osmdroid.config.Configuration.getInstance().setOsmdroidTileCache(tiles);
+        } catch (Exception ignored) {
+        }
         setContentView(R.layout.activity_main);
 
         pager = findViewById(R.id.pager);

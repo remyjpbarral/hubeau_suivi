@@ -45,8 +45,6 @@ public class SearchFragment extends Fragment implements StationListener {
 
     @Override
     public void onViewCreated(@NonNull View v, Bundle savedInstanceState) {
-        MainActivity a0 = activity();
-        if (a0 != null) a0.registerSearch(this);
         searchInput = v.findViewById(R.id.search_input);
         stationInfo = v.findViewById(R.id.station_info);
         statusText = v.findViewById(R.id.status_text);
@@ -123,6 +121,8 @@ public class SearchFragment extends Fragment implements StationListener {
                 }
             });
         }
+        MainActivity a0 = activity();
+        if (a0 != null) a0.registerSearch(this);
     }
 
     private void runAutocomplete() {
