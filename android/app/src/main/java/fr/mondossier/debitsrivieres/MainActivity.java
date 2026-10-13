@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
         }).attach();
 
         loadReferentiel();
+        warmupFavoritesAndRecent();
     }
 
     void registerSearch(SearchFragment f) {
@@ -121,7 +122,7 @@ public class MainActivity extends AppCompatActivity {
 
     void registerMap(MapFragment f) {
         this.mapFragment = f;
-        if (!referentielForMap.isEmpty()) f.addStations(referentielForMap, this::selectStation);
+        if (!referentielForMap.isEmpty()) f.setAllStations(referentielForMap, this::selectStation);
     }
 
     void registerFavorites(FavoritesFragment f) {
@@ -142,6 +143,7 @@ public class MainActivity extends AppCompatActivity {
 
     public void selectStation(HubEauClient.Station s) {
         currentStation = s;
+        RecentStore.add(this, s);
         statusText = "";
         if (searchFragment != null) searchFragment.refreshDisplay();
         if (chartFragment != null) chartFragment.refreshDisplay();
@@ -156,18 +158,27 @@ public class MainActivity extends AppCompatActivity {
         final boolean tr = TEMPS_REEL[selectedPeriod];
         final long now = System.currentTimeMillis();
         final long start = now - PERIODS[selectedPeriod];
+        List<HubEauClient.Observation> cached = DebitCache.getFresh(code);
+        if (cached != null) {
+            series.clear();
+            series.put(currentStation.libelle, cached);
+            statusText = "";
+            if (chartFragment != null) chartFragment.refreshDisplay();
+            return;
+        }
         statusText = getString(R.string.loading);
-        if (searchFragment != null) searchFragment.refreshDisplay();
+        if (chartFragment != null) chartFragment.refreshDisplay();
         runInBackground(() -> {
             try {
                 List<HubEauClient.Observation> obs = tr
                         ? HubEauClient.fetchDebitsTempsReel(code, start, now)
                         : HubEauClient.fetchDebitsJournaliers(code, start, now);
+                DebitCache.put(code, obs);
                 runOnUiThread(() -> {
                     series.clear();
                     series.put(currentStation.libelle, obs);
                     statusText = obs.isEmpty() ? getString(R.string.no_data) : "";
-                    if (searchFragment != null) searchFragment.refreshDisplay();
+                    if (chartFragment != null) chartFragment.refreshDisplay();
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
@@ -205,7 +216,7 @@ public class MainActivity extends AppCompatActivity {
             allStations.addAll(source);
             referentielForMap.clear();
             referentielForMap.addAll(source);
-            if (mapFragment != null) mapFragment.addStations(source, this::selectStation);
+            if (mapFragment != null) mapFragment.setAllStations(source, this::selectStation);
         }
         if (!source.isEmpty() && StationCache.isFresh(this)) return;
         runInBackground(() -> {
@@ -217,11 +228,46 @@ public class MainActivity extends AppCompatActivity {
                     allStations.addAll(all);
                     referentielForMap.clear();
                     referentielForMap.addAll(all);
-                    if (mapFragment != null) mapFragment.addStations(all, MainActivity.this::selectStation);
+                    if (mapFragment != null) mapFragment.setAllStations(all, MainActivity.this::selectStation);
                 });
             } catch (Exception ignored) {
             }
         });
+    }
+
+    void warmupZone(List<HubEauClient.Station> stations) {
+        List<HubEauClient.Station> todo = new ArrayList<>();
+        for (HubEauClient.Station s : stations) {
+            if (DebitCache.getFresh(s.code) == null) todo.add(s);
+            if (todo.size() >= 15) break;
+        }
+        if (todo.isEmpty()) return;
+        final long period = PERIODS[selectedPeriod];
+        final boolean tr = TEMPS_REEL[selectedPeriod];
+        executor.execute(() -> {
+            for (HubEauClient.Station s : todo) {
+                try {
+                    long now = System.currentTimeMillis();
+                    List<HubEauClient.Observation> obs = tr
+                            ? HubEauClient.fetchDebitsTempsReel(s.code, now - period, now)
+                            : HubEauClient.fetchDebitsJournaliers(s.code, now - period, now);
+                    DebitCache.put(s.code, obs);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    private void warmupFavoritesAndRecent() {
+        List<HubEauClient.Station> targets = new ArrayList<>();
+        for (HubEauClient.Station s : FavoritesStore.list(this)) targets.add(s);
+        for (HubEauClient.Station s : RecentStore.list(this)) {
+            boolean dup = false;
+            for (HubEauClient.Station t : targets) if (t.code.equals(s.code)) dup = true;
+            if (!dup) targets.add(s);
+        }
+        if (targets.isEmpty()) return;
+        DebitCache.warmup(targets, executor, PERIODS[selectedPeriod], TEMPS_REEL[selectedPeriod]);
     }
 
     void runInBackground(Runnable r) {
