@@ -126,14 +126,27 @@ public class ChartView extends View {
     }
 
     private void updateCursor() {
-        if (touchX < padL) {
+        try {
+            updateCursorUnsafe();
+        } catch (Exception e) {
             touchLabel = null;
-            if (touchListener != null) touchListener.onTouch(null);
+        }
+    }
+
+    private void updateCursorUnsafe() {
+        if (!hasData) {
+            touchLabel = null;
             return;
         }
         List<HubEauClient.Observation> obs = firstSeries();
         if (obs == null || obs.isEmpty()) {
             touchLabel = null;
+            if (touchListener != null) touchListener.onTouch(null);
+            return;
+        }
+        if (touchX < padL) {
+            touchLabel = null;
+            if (touchListener != null) touchListener.onTouch(null);
             return;
         }
         float chartW = getWidth() - padL - padR;
@@ -183,6 +196,13 @@ public class ChartView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        try {
+            drawContent(canvas);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void drawContent(Canvas canvas) {
         hasData = false;
         for (List<HubEauClient.Observation> obs : series.values()) {
             if (!obs.isEmpty()) { hasData = true; break; }

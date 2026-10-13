@@ -83,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        CrashLogger.install(this);
         try {
             org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DebitsRivieres/1.0");
             File base = new File(getCacheDir(), "osmdroid");
@@ -181,22 +182,26 @@ public class MainActivity extends AppCompatActivity {
                     lastError = e;
                 }
             }
+            final List<HubEauClient.Observation> result = obs;
+            final Exception finalError = lastError;
+            if (result == null) {
+                final String reason = finalError != null && finalError.getMessage() != null
+                        ? finalError.getMessage() : "réseau indisponible";
+                runOnUiThread(() -> {
+                    statusText = getString(R.string.error_api) + " : " + reason;
+                    if (chartFragment != null) chartFragment.refreshDisplay();
+                });
+                return;
+            }
             try {
-                if (obs == null) throw lastError != null ? lastError : new RuntimeException("pas de données");
-                DebitCache.put(code, obs);
-                final List<HubEauClient.Observation> result = obs;
+                DebitCache.put(code, result);
                 runOnUiThread(() -> {
                     series.clear();
                     series.put(currentStation.libelle, result);
                     statusText = result.isEmpty() ? getString(R.string.no_data) : "";
                     if (chartFragment != null) chartFragment.refreshDisplay();
                 });
-            } catch (Exception e) {
-                final Exception err = e;
-                runOnUiThread(() -> {
-                    statusText = getString(R.string.error_api) + " : " + err.getMessage();
-                    if (chartFragment != null) chartFragment.refreshDisplay();
-                });
+            } catch (Exception ignored) {
             }
         });
     }
