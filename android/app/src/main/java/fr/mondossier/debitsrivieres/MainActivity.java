@@ -148,7 +148,9 @@ public class MainActivity extends AppCompatActivity {
         statusText.setText(R.string.loading);
         runInBackground(() -> {
             try {
-                List<HubEauClient.Observation> obs = HubEauClient.fetchDebits(code, start, now, tr);
+                List<HubEauClient.Observation> obs = tr
+                        ? HubEauClient.fetchDebitsTempsReel(code, start, now)
+                        : HubEauClient.fetchDebitsJournaliers(code, start, now);
                 runOnUiThread(() -> {
                     series.clear();
                     series.put(stations.get(selectedStation).libelle, obs);

@@ -17,33 +17,30 @@ import java.util.TimeZone;
 
 public final class HubEauClient {
 
-    private static final String BASE = "https://hubeau.eaufrance.fr/api/v1/hydrometrie";
+    private static final String BASE = "https://hubeau.eaufrance.fr/api/v2/hydrometrie";
     private static final String UA = "DebitsRivieres/1.0 (Android; suivi hydrometrique)";
 
     public static final class Station {
         public final String code;
         public final String libelle;
         public final String coursEau;
-        public final Double dernierDebit;
 
-        Station(String code, String libelle, String coursEau, Double dernierDebit) {
+        Station(String code, String libelle, String coursEau) {
             this.code = code;
             this.libelle = libelle;
             this.coursEau = coursEau;
-            this.dernierDebit = dernierDebit;
         }
 
         public String display() {
             String s = libelle + " (" + code + ")";
             if (coursEau != null && !coursEau.isEmpty()) s += " – " + coursEau;
-            if (dernierDebit != null) s += " – " + String.format(Locale.FRANCE, "%.1f m³/s", dernierDebit);
             return s;
         }
     }
 
     public static final class Observation {
         public final long timestampMs;
-        public final float debit; // m3/s, moyen ou instantané
+        public final float debit; // m3/s
 
         Observation(long t, float d) {
             this.timestampMs = t;
@@ -77,31 +74,27 @@ public final class HubEauClient {
         }
     }
 
-    private static long toMillis(String dateObs, String heureObs) {
-        try {
-            String iso = dateObs;
-            if (heureObs != null && heureObs.length() >= 4 && !heureObs.equals("000000")) {
-                iso = dateObs + "T" + heureObs.substring(0, 2) + ":" + heureObs.substring(2, 4) + ":00Z";
-            }
-            SimpleDateFormat fmt;
-            if (iso.contains("T")) {
-                fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
-                fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-            } else {
-                fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
-                fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-            }
-            Date d = fmt.parse(iso);
-            return d != null ? d.getTime() : 0L;
-        } catch (Exception e) {
-            return 0L;
-        }
+    private static SimpleDateFormat isoUtc() {
+        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return f;
+    }
+
+    private static SimpleDateFormat isoDate() {
+        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return f;
     }
 
     public static List<Station> searchStations(String query) throws Exception {
         List<Station> result = new ArrayList<>();
-        JSONObject root = new JSONObject(get(BASE + "/stations?en_service=true&size=30&format=json"
-                + (query.trim().isEmpty() ? "" : "&libelle_station=" + java.net.URLEncoder.encode(query.trim(), "UTF-8"))));
+        String q = query.trim();
+        String params = "&en_service=true&size=30&format=json"
+                + "&fields=code_station,libelle_station,libelle_cours_eau";
+        if (!q.isEmpty()) {
+            params += "&libelle_station=" + java.net.URLEncoder.encode(q, "UTF-8");
+        }
+        JSONObject root = new JSONObject(get(BASE + "/referentiel/stations?" + params));
         JSONArray arr = root.optJSONArray("data");
         if (arr == null) return result;
         for (int i = 0; i < arr.length(); i++) {
@@ -109,37 +102,69 @@ public final class HubEauClient {
             result.add(new Station(
                     s.getString("code_station"),
                     s.optString("libelle_station", s.getString("code_station")),
-                    s.optString("libelle_cours_eau", null),
-                    s.has("dernier_debit") && !s.isNull("dernier_debit")
-                            ? s.getDouble("dernier_debit") : null));
+                    s.optString("libelle_cours_eau", null)));
         }
         return result;
     }
 
-    public static List<Observation> fetchDebits(String stationCode, long startMs, long endMs, boolean tempsReel) throws Exception {
-        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US);
-        fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-        String path = tempsReel ? "/observations_tr" : "/observations";
-        String url = BASE + path
+    public static List<Observation> fetchDebitsTempsReel(String stationCode, long startMs, long endMs) throws Exception {
+        SimpleDateFormat fmt = isoUtc();
+        String url = BASE + "/observations_tr"
                 + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
                 + "&grandeur_hydro=Q"
                 + "&date_debut_obs=" + fmt.format(new Date(startMs))
                 + "&date_fin_obs=" + fmt.format(new Date(endMs))
-                + "&size=2000&format=json&sort=asc";
+                + "&size=20000&format=json&sort=asc";
+        List<Observation> list = parseObservationsTr(url);
+        // le temps réel ne maintient qu'un mois d'historique : complément par débits moyens journaliers si vide
+        if (list.isEmpty() && endMs - startMs > 24L * 3600_000L) {
+            return fetchDebitsJournaliers(stationCode, startMs, endMs);
+        }
+        return list;
+    }
+
+    public static List<Observation> fetchDebitsJournaliers(String stationCode, long startMs, long endMs) throws Exception {
+        SimpleDateFormat fmt = isoDate();
+        String url = BASE + "/obs_elab"
+                + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
+                + "&grandeur_hydro_elab=QmnJ"
+                + "&date_debut_obs_elab=" + fmt.format(new Date(startMs))
+                + "&date_fin_obs_elab=" + fmt.format(new Date(endMs))
+                + "&size=20000&format=json&sort=asc";
+        List<Observation> list = new ArrayList<>();
         JSONObject root = new JSONObject(get(url));
         JSONArray arr = root.optJSONArray("data");
-        List<Observation> list = new ArrayList<>();
         if (arr == null) return list;
         for (int i = 0; i < arr.length(); i++) {
             JSONObject o = arr.getJSONObject(i);
-            double d = o.optDouble("resultat_obs", Double.NaN);
-            if (Double.isNaN(d)) continue;
-            // Hubeau renvoie les débits en l/s pour Q ; conversion en m3/s si > seuil arbitraire de cohérence
-            double debit = d;
-            if (tempsReel) debit = d; // observations_tr : l/s
-            if (debit > 20000) debit = debit / 1000.0;
-            long t = toMillis(o.optString("date_obs", ""), o.optString("heure_obs", null));
-            if (t > 0) list.add(new Observation(t, (float) debit));
+            double lps = o.optDouble("resultat_obs_elab", Double.NaN);
+            if (Double.isNaN(lps)) continue;
+            list.add(new Observation(
+                    isoDate().parse(o.optString("date_obs_elab", "")).getTime(),
+                    (float) (lps / 1000.0)));
+        }
+        return list;
+    }
+
+    private static List<Observation> parseObservationsTr(String url) throws Exception {
+        List<Observation> list = new ArrayList<>();
+        JSONObject root = new JSONObject(get(url));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr == null) return list;
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+        fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.getJSONObject(i);
+            double lps = o.optDouble("resultat_obs", Double.NaN);
+            String dateObs = o.optString("date_obs", "");
+            if (Double.isNaN(lps) || dateObs.isEmpty()) continue;
+            Date d;
+            try {
+                d = fmt.parse(dateObs);
+            } catch (Exception e) {
+                continue;
+            }
+            if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
         }
         return list;
     }
