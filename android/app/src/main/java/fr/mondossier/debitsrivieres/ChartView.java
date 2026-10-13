@@ -164,7 +164,7 @@ public class ChartView extends View {
             int mid = (lo + hi) >>> 1;
             HubEauClient.Observation o = obs.get(mid);
             if (o.timestampMs < t) lo = mid + 1;
-            else hi = mid;
+            else hi = mid - 1;
         }
         if (hi >= 0) best = obs.get(hi);
         if (lo < obs.size()) {
@@ -311,7 +311,7 @@ public class ChartView extends View {
                 int mid = (lo + hi) >>> 1;
                 HubEauClient.Observation o = obs.get(mid);
                 if (o.timestampMs < t) lo = mid + 1;
-                else hi = mid;
+                else hi = mid - 1;
             }
             if (hi >= 0) best = obs.get(hi);
             if (lo < obs.size()) {
