@@ -107,6 +107,53 @@ public final class HubEauClient {
         return result;
     }
 
+    public static List<Station> searchStationsAny(String query) throws Exception {
+        String q = query.trim();
+        if (q.isEmpty()) return searchStations("");
+        java.util.LinkedHashMap<String, Station> merged = new java.util.LinkedHashMap<>();
+        String paramsBase = "&en_service=true&size=30&format=json"
+                + "&fields=code_station,libelle_station,libelle_cours_eau&libelle_station=";
+        String enc = java.net.URLEncoder.encode(q, "UTF-8");
+        try {
+            for (Station s : parseStations(get(BASE + "/referentiel/stations?" + paramsBase + enc))) {
+                merged.put(s.code, s);
+            }
+        } catch (Exception ignored) {
+        }
+        if (merged.size() < 30) {
+            try {
+                String url = BASE + "/referentiel/stations?en_service=true&size=30&format=json"
+                        + "&fields=code_station,libelle_station,libelle_cours_eau&libelle_cours_eau=" + enc;
+                for (Station s : parseStations(get(url))) {
+                    merged.putIfAbsent(s.code, s);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (merged.isEmpty() && !q.isEmpty()) {
+            try {
+                for (Station s : searchStations(q)) merged.put(s.code, s);
+            } catch (Exception ignored) {
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    private static List<Station> parseStations(String json) throws Exception {
+        List<Station> result = new ArrayList<>();
+        JSONObject root = new JSONObject(json);
+        JSONArray arr = root.optJSONArray("data");
+        if (arr == null) return result;
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject s = arr.getJSONObject(i);
+            result.add(new Station(
+                    s.getString("code_station"),
+                    s.optString("libelle_station", s.getString("code_station")),
+                    s.optString("libelle_cours_eau", null)));
+        }
+        return result;
+    }
+
     public static List<Observation> fetchDebitsTempsReel(String stationCode, long startMs, long endMs) throws Exception {
         SimpleDateFormat fmt = isoUtc();
         String url = BASE + "/observations_tr"

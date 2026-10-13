@@ -1,15 +1,19 @@
 package fr.mondossier.debitsrivieres;
 
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.ArrayList;
@@ -25,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private static final long DAY = 24 * HOUR;
 
     private static final long[] PERIODS = {6 * HOUR, 24 * HOUR, 7 * DAY, 30 * DAY, 365 * DAY};
-    private static final boolean[] TEMPS_REEL = {true, true, true, false, false};
+    private static final boolean[] TEMPS_REEL = {true, true, true, true, false};
     private static final String[] PERIOD_LABELS = {
             "6 dernières heures", "24 dernières heures", "7 derniers jours",
             "30 derniers jours", "12 derniers mois"
@@ -35,15 +39,16 @@ public class MainActivity extends AppCompatActivity {
     private final List<HubEauClient.Station> stations = new ArrayList<>();
     private final Map<String, List<HubEauClient.Observation>> series = new LinkedHashMap<>();
 
-    private EditText searchInput;
-    private Spinner stationSpinner;
+    private AutoCompleteTextView searchInput;
     private Spinner periodSpinner;
     private TextView stationInfo;
     private TextView statusText;
     private ChartView chart;
+    private Button favToggle;
     private ArrayAdapter<String> stationAdapter;
+    private ArrayAdapter<String> autocompleteAdapter;
 
-    private int selectedStation = -1;
+    private HubEauClient.Station currentStation = null;
     private int selectedPeriod = 1;
 
     @Override
@@ -52,11 +57,11 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         searchInput = findViewById(R.id.search_input);
-        stationSpinner = new Spinner(this);
         periodSpinner = findViewById(R.id.period_spinner);
         stationInfo = findViewById(R.id.station_info);
         statusText = findViewById(R.id.status_text);
         chart = findViewById(R.id.chart);
+        favToggle = findViewById(R.id.fav_toggle_button);
 
         ArrayAdapter<String> periodAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, PERIOD_LABELS);
@@ -67,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
                 selectedPeriod = pos;
-                if (selectedStation >= 0) loadDebits();
+                if (currentStation != null) loadDebits();
             }
 
             @Override
@@ -77,45 +82,105 @@ public class MainActivity extends AppCompatActivity {
 
         Button searchButton = findViewById(R.id.search_button);
         searchButton.setOnClickListener(v -> searchStations(searchInput.getText().toString()));
-        searchInput.setOnEditorActionListener((v, actionId, event) -> {
-            searchStations(searchInput.getText().toString());
-            return true;
-        });
 
         Button refreshButton = findViewById(R.id.refresh_button);
         refreshButton.setOnClickListener(v -> {
-            if (selectedStation >= 0) loadDebits();
+            if (currentStation != null) loadDebits();
             else Toast.makeText(this, "Sélectionnez d'abord une station", Toast.LENGTH_SHORT).show();
         });
 
-        stationAdapter = new ArrayAdapter<>(this, R.layout.item_station, new ArrayList<>());
-        stationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        Button favListButton = findViewById(R.id.fav_list_button);
+        favListButton.setOnClickListener(v -> showFavorites());
+
+        favToggle.setOnClickListener(v -> {
+            if (currentStation == null) {
+                Toast.makeText(this, "Sélectionnez d'abord une station", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (FavoritesStore.isFavorite(this, currentStation.code)) {
+                FavoritesStore.remove(this, currentStation.code);
+                Toast.makeText(this, "Retiré des favoris", Toast.LENGTH_SHORT).show();
+            } else {
+                FavoritesStore.add(this, currentStation);
+                Toast.makeText(this, "Ajouté aux favoris", Toast.LENGTH_SHORT).show();
+            }
+            updateFavButton();
+        });
+
+        autocompleteAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, new ArrayList<>());
+        searchInput.setAdapter(autocompleteAdapter);
+        searchInput.setOnItemClickListener((parent, view, pos, id) -> {
+            String picked = (String) parent.getItemAtPosition(pos);
+            HubEauClient.Station s = stationByLabel(picked);
+            if (s != null) selectStation(s);
+        });
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                String q = s.toString().trim();
+                if (q.length() >= 3) autocomplete(q);
+            }
+        });
 
         statusText.setText(R.string.loading);
         searchStations("");
+    }
+
+    private HubEauClient.Station stationByLabel(String label) {
+        for (HubEauClient.Station s : stations) {
+            if (s.display().equals(label)) return s;
+        }
+        return null;
+    }
+
+    private void autocomplete(String query) {
+        runInBackground(() -> {
+            try {
+                List<HubEauClient.Station> found = HubEauClient.searchStationsAny(query);
+                runOnUiThread(() -> {
+                    if (!searchInput.getText().toString().trim().equals(query)) return;
+                    stations.clear();
+                    stations.addAll(found);
+                    List<String> labels = new ArrayList<>();
+                    for (HubEauClient.Station s : found) labels.add(s.display());
+                    autocompleteAdapter.clear();
+                    autocompleteAdapter.addAll(labels);
+                    if (searchInput.isFocused() && labels.size() > 0
+                            && !searchInput.isPerformingCompletion()) {
+                        autocompleteAdapter.getFilter().filter(null);
+                        searchInput.showDropDown();
+                    }
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private void searchStations(String query) {
         statusText.setText(R.string.loading);
         runInBackground(() -> {
             try {
-                List<HubEauClient.Station> found = HubEauClient.searchStations(query);
+                List<HubEauClient.Station> found = HubEauClient.searchStationsAny(query);
                 runOnUiThread(() -> {
                     stations.clear();
                     stations.addAll(found);
-                    selectedStation = -1;
-                    series.clear();
-                    chart.setSeries(series);
-                    stationInfo.setText("");
                     if (found.isEmpty()) {
-                        showStationPicker(getString(R.string.no_results));
+                        currentStation = null;
+                        stationInfo.setText("");
+                        series.clear();
+                        chart.setSeries(series);
+                        statusText.setText(R.string.no_results);
                     } else {
-                        List<String> labels = new ArrayList<>();
-                        for (HubEauClient.Station s : found) labels.add(s.display());
-                        stationAdapter = new ArrayAdapter<>(MainActivity.this,
-                                R.layout.item_station, labels);
-                        stationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                        showStationPicker(null);
+                        showStationPicker();
                     }
                 });
             } catch (Exception e) {
@@ -124,24 +189,48 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void showStationPicker(String message) {
-        if (message != null) {
-            statusText.setText(message);
-            return;
-        }
+    private void showStationPicker() {
+        List<String> labels = new ArrayList<>();
+        for (HubEauClient.Station s : stations) labels.add(s.display());
+        stationAdapter = new ArrayAdapter<>(this, R.layout.item_station, labels);
+        stationAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         statusText.setText("");
-        new androidx.appcompat.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Choisir une station")
-                .setAdapter(stationAdapter, (dialog, which) -> {
-                    selectedStation = which;
-                    stationInfo.setText(stations.get(which).display());
-                    loadDebits();
-                })
+                .setAdapter(stationAdapter, (dialog, which) -> selectStation(stations.get(which)))
                 .show();
     }
 
+    private void showFavorites() {
+        List<HubEauClient.Station> favs = FavoritesStore.list(this);
+        if (favs.isEmpty()) {
+            Toast.makeText(this, getString(R.string.favorites_empty), Toast.LENGTH_LONG).show();
+            return;
+        }
+        List<String> labels = new ArrayList<>();
+        for (HubEauClient.Station s : favs) labels.add(s.display());
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, R.layout.item_station, labels);
+        new AlertDialog.Builder(this)
+                .setTitle("Favoris")
+                .setAdapter(ad, (dialog, which) -> selectStation(favs.get(which)))
+                .setNegativeButton("Fermer", null)
+                .show();
+    }
+
+    private void selectStation(HubEauClient.Station s) {
+        currentStation = s;
+        stationInfo.setText(s.display());
+        updateFavButton();
+        loadDebits();
+    }
+
+    private void updateFavButton() {
+        boolean fav = currentStation != null && FavoritesStore.isFavorite(this, currentStation.code);
+        favToggle.setText(fav ? "★" : "☆");
+    }
+
     private void loadDebits() {
-        final String code = stations.get(selectedStation).code;
+        final String code = currentStation.code;
         final boolean tr = TEMPS_REEL[selectedPeriod];
         final long now = System.currentTimeMillis();
         final long start = now - PERIODS[selectedPeriod];
@@ -153,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
                         : HubEauClient.fetchDebitsJournaliers(code, start, now);
                 runOnUiThread(() -> {
                     series.clear();
-                    series.put(stations.get(selectedStation).libelle, obs);
+                    series.put(currentStation.libelle, obs);
                     chart.setSeries(series);
                     if (obs.isEmpty()) {
                         statusText.setText(R.string.no_data);

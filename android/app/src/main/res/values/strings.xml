@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Débits Rivières</string>
-    <string name="search_hint">Rechercher une station (nom, cours d\'eau, code…)</string>
+    <string name="search_hint">Taper le nom d\'une station ou d\'un cours d\'eau…</string>
     <string name="period_label">Pas de temps :</string>
     <string name="btn_search">Rechercher</string>
     <string name="btn_refresh">Actualiser</string>
+    <string name="btn_fav_toggle">★</string>
+    <string name="btn_fav_list">Favoris</string>
     <string name="loading">Chargement…</string>
     <string name="no_results">Aucune station trouvée</string>
     <string name="error_api">Erreur de connexion à l\'API HubEau</string>
     <string name="no_data">Aucune donnée de débit pour cette station et cette période</string>
+    <string name="favorites_empty">Aucun favori enregistré.\nTouchez ★ pour ajouter la station affichée.</string>
     <string name="disclaimer">Données : API HubEau / hydrométrie – SANDRE (Ministère en charge de l\'écologie, Eau France). Conditions d\'utilisation : https://hubeau.eaufrance.fr/page/conditions-dutilisation</string>
 </resources>
