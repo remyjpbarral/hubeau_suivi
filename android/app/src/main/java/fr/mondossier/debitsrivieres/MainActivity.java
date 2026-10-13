@@ -195,9 +195,15 @@ public class MainActivity extends AppCompatActivity {
             Exception lastError = null;
             for (int attempt = 0; attempt < 2 && obs == null; attempt++) {
                 try {
-                    obs = tr
-                            ? HubEauClient.fetchDebitsTempsReel(code, start, now)
-                            : HubEauClient.fetchDebitsJournaliers(code, start, now);
+                    if (tr) {
+                        obs = HubEauClient.fetchDebitsTempsReel(code, start, now);
+                    } else {
+                        try {
+                            obs = HubEauClient.fetchDebitsFromRelay(code, start, now);
+                        } catch (Exception relayError) {
+                            obs = HubEauClient.fetchDebitsJournaliers(code, start, now);
+                        }
+                    }
                 } catch (Exception e) {
                     lastError = e;
                 }

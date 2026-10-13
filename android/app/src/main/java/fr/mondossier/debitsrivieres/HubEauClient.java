@@ -188,6 +188,29 @@ public final class HubEauClient {
         return list;
     }
 
+    public static List<Observation> fetchDebitsFromRelay(String stationCode, long startMs, long endMs) throws Exception {
+        String url = "https://raw.githubusercontent.com/remyjpbarral/hubeau_suivi/data/daily/debits_30j.json";
+        JSONObject root = new JSONObject(get(url));
+        JSONObject stations = root.getJSONObject("stations");
+        if (!stations.has(stationCode)) return new ArrayList<>();
+        JSONArray arr = stations.getJSONArray(stationCode);
+        List<Observation> list = new ArrayList<>();
+        SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        for (int i = 0; i < arr.length(); i++) {
+            JSONArray pair = arr.getJSONArray(i);
+            try {
+                long t = fmt.parse(pair.getString(0)).getTime();
+                if (t >= startMs && t <= endMs) {
+                    list.add(new Observation(t, (float) pair.getDouble(1)));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        return list;
+    }
+
     public static List<Observation> fetchDebitsJournaliers(String stationCode, long startMs, long endMs) throws Exception {
         SimpleDateFormat fmt = isoDate();
         String url = BASE + "/obs_elab"
