@@ -223,9 +223,15 @@ public class MainActivity extends AppCompatActivity {
                     if (tr) {
                         obs = HubEauClient.fetchDebitsTempsReel(code, start, now);
                     } else {
+                        List<HubEauClient.Observation> relayObs = null;
                         try {
-                            obs = HubEauClient.fetchDebitsFromRelay(code, start, now);
+                            relayObs = HubEauClient.fetchDebitsFromRelay(code, start, now);
                         } catch (Exception relayError) {
+                            relayObs = null;
+                        }
+                        if (relayObs != null && !relayObs.isEmpty()) {
+                            obs = relayObs;
+                        } else {
                             obs = HubEauClient.fetchDebitsJournaliers(code, start, now);
                         }
                     }
