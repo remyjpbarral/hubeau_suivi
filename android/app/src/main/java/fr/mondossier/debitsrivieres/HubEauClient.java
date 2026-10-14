@@ -188,12 +188,34 @@ public final class HubEauClient {
         return list;
     }
 
+    public interface RelaySource {
+        String load(String stationCode);
+        void save(String stationCode, String content);
+    }
+
+    private static RelaySource relaySource;
+
+    public static void setRelaySource(RelaySource s) {
+        relaySource = s;
+    }
+
     public static List<Observation> fetchDebitsFromRelay(String stationCode, long startMs, long endMs) throws Exception {
-        String url = "https://raw.githubusercontent.com/remyjpbarral/hubeau_suivi/data/daily/debits_30j.json";
-        JSONObject root = new JSONObject(get(url));
-        JSONObject stations = root.getJSONObject("stations");
-        if (!stations.has(stationCode)) return new ArrayList<>();
-        JSONArray arr = stations.getJSONArray(stationCode);
+        String url = "https://raw.githubusercontent.com/remyjpbarral/hubeau_suivi/data/daily/stations/"
+                + java.net.URLEncoder.encode(stationCode, "UTF-8") + ".json";
+        String raw = null;
+        Exception netError = null;
+        try {
+            raw = get(url);
+            if (relaySource != null) relaySource.save(stationCode, raw);
+        } catch (Exception e) {
+            netError = e;
+            if (relaySource != null) raw = relaySource.load(stationCode);
+        }
+        if (raw == null) {
+            throw netError != null ? netError : new RuntimeException("relay inaccessible");
+        }
+        JSONObject root = new JSONObject(raw);
+        JSONArray arr = root.getJSONArray("obs");
         List<Observation> list = new ArrayList<>();
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));

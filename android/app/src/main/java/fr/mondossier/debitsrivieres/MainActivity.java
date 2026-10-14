@@ -86,6 +86,30 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         CrashLogger.install(this);
         AnrWatchdog.install(this);
+        HubEauClient.setRelaySource(new HubEauClient.RelaySource() {
+            @Override
+            public String load(String stationCode) {
+                try {
+                    java.io.File f = new java.io.File(getCacheDir(), "relay_" + stationCode + ".json");
+                    if (!f.exists()) return null;
+                    byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
+                    return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+
+            @Override
+            public void save(String stationCode, String content) {
+                try {
+                    java.io.File f = new java.io.File(getCacheDir(), "relay_" + stationCode + ".json");
+                    java.io.FileWriter w = new java.io.FileWriter(f);
+                    w.write(content);
+                    w.close();
+                } catch (Exception ignored) {
+                }
+            }
+        });
         try {
             org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DebitsRivieres/1.0");
             File base = new File(getCacheDir(), "osmdroid");
