@@ -53,7 +53,7 @@ public final class DebitCache {
                     List<HubEauClient.Observation> obs = tempsReel
                             ? HubEauClient.fetchDebitsTempsReel(s.code, now - periodMs, now)
                             : HubEauClient.fetchDebitsJournaliers(s.code, now - periodMs, now);
-                    put(s.code, obs);
+                    put(s.code, periodMs, tempsReel, obs);
                 } catch (Exception ignored) {
                 }
             }
