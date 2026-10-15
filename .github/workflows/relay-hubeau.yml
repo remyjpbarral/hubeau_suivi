@@ -41,6 +41,7 @@ jobs:
           day = start
           total = 0
           os.makedirs("daily", exist_ok=True)
+          os.makedirs("daily/stations", exist_ok=True)
           while day <= today:
               url = (f"{B}?grandeur_hydro_elab=QmnJ"
                      f"&date_debut_obs_elab={day.isoformat()}"
@@ -54,7 +55,10 @@ jobs:
                       r = o.get("resultat_obs_elab")
                       if r is None:
                           continue
-                      out.setdefault(o["code_station"], []).append([o["date_obs_elab"], r / 1000.0])
+                      code = o["code_station"]
+                      if code not in out:
+                          out[code] = []
+                      out[code].append([o["date_obs_elab"], r / 1000.0])
                       n += 1
                   total += n
                   print(f"{day}: {n} obs", flush=True)
@@ -62,6 +66,15 @@ jobs:
                   print(f"{day}: FAIL {e}", flush=True)
               day += datetime.timedelta(days=1)
               time.sleep(1)
+          for code, obs in out.items():
+              seen = {}
+              for date, val in obs:
+                  seen[date] = val
+              dedup = [[d, v] for d, v in sorted(seen.items())]
+              out[code] = dedup
+              with open(f"daily/stations/{code}.json", "w", encoding="utf-8") as f:
+                  json.dump({"generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                             "obs": dedup}, f, ensure_ascii=False, separators=(",", ":"))
           with open("daily/debits_30j.json", "w", encoding="utf-8") as f:
               json.dump({"generated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                          "stations": out}, f, ensure_ascii=False, separators=(",", ":"))

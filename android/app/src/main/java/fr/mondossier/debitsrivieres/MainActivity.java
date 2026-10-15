@@ -202,9 +202,10 @@ public class MainActivity extends AppCompatActivity {
         if (currentStation == null) return;
         final String code = currentStation.code;
         final boolean tr = TEMPS_REEL[selectedPeriod];
+        final long period = PERIODS[selectedPeriod];
         final long now = System.currentTimeMillis();
-        final long start = now - PERIODS[selectedPeriod];
-        List<HubEauClient.Observation> cached = DebitCache.getFresh(code);
+        final long start = now - period;
+        List<HubEauClient.Observation> cached = DebitCache.getFresh(code, period, tr);
         if (cached != null) {
             series.clear();
             series.put(currentStation.libelle, cached);
@@ -224,10 +225,12 @@ public class MainActivity extends AppCompatActivity {
                         obs = HubEauClient.fetchDebitsTempsReel(code, start, now);
                     } else {
                         List<HubEauClient.Observation> relayObs = null;
-                        try {
-                            relayObs = HubEauClient.fetchDebitsFromRelay(code, start, now);
-                        } catch (Exception relayError) {
-                            relayObs = null;
+                        if (period <= 30 * DAY) {
+                            try {
+                                relayObs = HubEauClient.fetchDebitsFromRelay(code, start, now);
+                            } catch (Exception relayError) {
+                                relayObs = null;
+                            }
                         }
                         if (relayObs != null && !relayObs.isEmpty()) {
                             obs = relayObs;
@@ -252,7 +255,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             try {
-                DebitCache.put(code, result);
+                DebitCache.put(code, period, tr, result);
                 runOnUiThread(() -> {
                     isLoading = false;
                     series.clear();
@@ -312,14 +315,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void warmupZone(List<HubEauClient.Station> stations) {
-        List<HubEauClient.Station> todo = new ArrayList<>();
-        for (HubEauClient.Station s : stations) {
-            if (DebitCache.getFresh(s.code) == null) todo.add(s);
-            if (todo.size() >= 8) break;
-        }
-        if (todo.isEmpty()) return;
         final long period = PERIODS[selectedPeriod];
         final boolean tr = TEMPS_REEL[selectedPeriod];
+        List<HubEauClient.Station> todo = new ArrayList<>();
+        for (HubEauClient.Station s : stations) {
+            if (DebitCache.getFresh(s.code, period, tr) == null) todo.add(s);
+            if (todo.size() >= 8) break;
+        }
         warmExecutor.execute(() -> {
             for (HubEauClient.Station s : todo) {
                 try {
@@ -327,7 +329,7 @@ public class MainActivity extends AppCompatActivity {
                     List<HubEauClient.Observation> obs = tr
                             ? HubEauClient.fetchDebitsTempsReel(s.code, now - period, now)
                             : HubEauClient.fetchDebitsJournaliers(s.code, now - period, now);
-                    DebitCache.put(s.code, obs);
+                    DebitCache.put(s.code, period, tr, obs);
                 } catch (Exception ignored) {
                 }
             }

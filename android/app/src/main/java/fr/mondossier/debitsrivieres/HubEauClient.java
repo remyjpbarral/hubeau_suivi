@@ -219,16 +219,18 @@ public final class HubEauClient {
         List<Observation> list = new ArrayList<>();
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        java.util.LinkedHashMap<String, Observation> byDate = new java.util.LinkedHashMap<>();
         for (int i = 0; i < arr.length(); i++) {
             JSONArray pair = arr.getJSONArray(i);
             try {
                 long t = fmt.parse(pair.getString(0)).getTime();
                 if (t >= startMs && t <= endMs) {
-                    list.add(new Observation(t, (float) pair.getDouble(1)));
+                    byDate.put(pair.getString(0), new Observation(t, (float) pair.getDouble(1)));
                 }
             } catch (Exception ignored) {
             }
         }
+        list.addAll(byDate.values());
         java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
         return list;
     }
