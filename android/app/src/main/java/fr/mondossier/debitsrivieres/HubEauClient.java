@@ -261,23 +261,30 @@ public final class HubEauClient {
 
     private static List<Observation> parseObservationsTr(String url) throws Exception {
         List<Observation> list = new ArrayList<>();
-        JSONObject root = new JSONObject(get(url));
-        JSONArray arr = root.optJSONArray("data");
-        if (arr == null) return list;
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.getJSONObject(i);
-            double lps = o.optDouble("resultat_obs", Double.NaN);
-            String dateObs = o.optString("date_obs", "");
-            if (Double.isNaN(lps) || dateObs.isEmpty()) continue;
-            Date d;
-            try {
-                d = fmt.parse(dateObs);
-            } catch (Exception e) {
-                continue;
+        String next = url;
+        int pages = 0;
+        while (next != null && !next.isEmpty() && pages < 10) {
+            JSONObject root = new JSONObject(get(next));
+            JSONArray arr = root.optJSONArray("data");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.getJSONObject(i);
+                    double lps = o.optDouble("resultat_obs", Double.NaN);
+                    String dateObs = o.optString("date_obs", "");
+                    if (Double.isNaN(lps) || dateObs.isEmpty()) continue;
+                    Date d;
+                    try {
+                        d = fmt.parse(dateObs);
+                    } catch (Exception e) {
+                        continue;
+                    }
+                    if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
+                }
             }
-            if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
+            next = root.has("next") && !root.isNull("next") ? root.optString("next") : null;
+            pages++;
         }
         java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
         return list;
