@@ -28,7 +28,7 @@ public class MainActivity extends AppCompatActivity {
     private static final long DAY = 24 * HOUR;
 
     static final long[] PERIODS = {6 * HOUR, 24 * HOUR, 7 * DAY, 30 * DAY, 365 * DAY};
-    static final boolean[] TEMPS_REEL = {true, true, false, false, false};
+    static final boolean[] TEMPS_REEL = {true, true, true, true, false};
     static final String[] PERIOD_LABELS = {
             "6 heures", "24 heures", "7 jours", "30 jours", "12 mois"
     };
@@ -85,6 +85,31 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         CrashLogger.install(this);
+        AnrWatchdog.install(this);
+        HubEauClient.setRelaySource(new HubEauClient.RelaySource() {
+            @Override
+            public String load(String stationCode) {
+                try {
+                    java.io.File f = new java.io.File(getCacheDir(), "relay_" + stationCode + ".json");
+                    if (!f.exists()) return null;
+                    byte[] b = java.nio.file.Files.readAllBytes(f.toPath());
+                    return new String(b, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+
+            @Override
+            public void save(String stationCode, String content) {
+                try {
+                    java.io.File f = new java.io.File(getCacheDir(), "relay_" + stationCode + ".json");
+                    java.io.FileWriter w = new java.io.FileWriter(f);
+                    w.write(content);
+                    w.close();
+                } catch (Exception ignored) {
+                }
+            }
+        });
         try {
             org.osmdroid.config.Configuration.getInstance().setUserAgentValue("DebitsRivieres/1.0");
             File base = new File(getCacheDir(), "osmdroid");
@@ -177,9 +202,10 @@ public class MainActivity extends AppCompatActivity {
         if (currentStation == null) return;
         final String code = currentStation.code;
         final boolean tr = TEMPS_REEL[selectedPeriod];
+        final long period = PERIODS[selectedPeriod];
         final long now = System.currentTimeMillis();
-        final long start = now - PERIODS[selectedPeriod];
-        List<HubEauClient.Observation> cached = DebitCache.getFresh(code);
+        final long start = now - period;
+        List<HubEauClient.Observation> cached = DebitCache.getFresh(code, period, tr);
         if (cached != null) {
             series.clear();
             series.put(currentStation.libelle, cached);
@@ -198,11 +224,7 @@ public class MainActivity extends AppCompatActivity {
                     if (tr) {
                         obs = HubEauClient.fetchDebitsTempsReel(code, start, now);
                     } else {
-                        try {
-                            obs = HubEauClient.fetchDebitsFromRelay(code, start, now);
-                        } catch (Exception relayError) {
-                            obs = HubEauClient.fetchDebitsJournaliers(code, start, now);
-                        }
+                        obs = HubEauClient.fetchDebitsJournaliers(code, start, now);
                     }
                 } catch (Exception e) {
                     lastError = e;
@@ -221,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             try {
-                DebitCache.put(code, result);
+                DebitCache.put(code, period, tr, result);
                 runOnUiThread(() -> {
                     isLoading = false;
                     series.clear();
@@ -281,14 +303,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void warmupZone(List<HubEauClient.Station> stations) {
-        List<HubEauClient.Station> todo = new ArrayList<>();
-        for (HubEauClient.Station s : stations) {
-            if (DebitCache.getFresh(s.code) == null) todo.add(s);
-            if (todo.size() >= 8) break;
-        }
-        if (todo.isEmpty()) return;
         final long period = PERIODS[selectedPeriod];
         final boolean tr = TEMPS_REEL[selectedPeriod];
+        List<HubEauClient.Station> todo = new ArrayList<>();
+        for (HubEauClient.Station s : stations) {
+            if (DebitCache.getFresh(s.code, period, tr) == null) todo.add(s);
+            if (todo.size() >= 8) break;
+        }
         warmExecutor.execute(() -> {
             for (HubEauClient.Station s : todo) {
                 try {
@@ -296,7 +317,7 @@ public class MainActivity extends AppCompatActivity {
                     List<HubEauClient.Observation> obs = tr
                             ? HubEauClient.fetchDebitsTempsReel(s.code, now - period, now)
                             : HubEauClient.fetchDebitsJournaliers(s.code, now - period, now);
-                    DebitCache.put(s.code, obs);
+                    DebitCache.put(s.code, period, tr, obs);
                 } catch (Exception ignored) {
                 }
             }

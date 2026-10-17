@@ -104,7 +104,7 @@ public class SearchFragment extends Fragment implements StationListener {
                 .setTitle("Diagnostic")
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) {
-                        String trace = CrashLogger.last(requireContext());
+                        String trace = CrashLogger.fullReport(requireContext());
                         if (trace.isEmpty()) {
                             android.widget.Toast.makeText(requireContext(),
                                     "Aucun plantage enregistré 🙂", android.widget.Toast.LENGTH_SHORT).show();
@@ -117,7 +117,8 @@ public class SearchFragment extends Fragment implements StationListener {
                         startActivity(android.content.Intent.createChooser(i, "Partager la trace"));
                     } else {
                         requireContext().getSharedPreferences("debits_crash", android.content.Context.MODE_PRIVATE)
-                                .edit().remove("last_crash").remove("prev_crash").apply();
+                                .edit().remove("last_crash").remove("prev_crash")
+                                .remove("last_anr").remove("prev_anr").apply();
                         android.widget.Toast.makeText(requireContext(), "Plantages effacés", android.widget.Toast.LENGTH_SHORT).show();
                     }
                 })

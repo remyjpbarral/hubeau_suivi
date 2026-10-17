@@ -26,12 +26,16 @@ public final class DebitCache {
     private DebitCache() {
     }
 
-    public static void put(String code, List<HubEauClient.Observation> obs) {
-        CACHE.put(code, new Entry(obs, System.currentTimeMillis()));
+    private static String key(String code, long periodMs, boolean tempsReel) {
+        return code + "|" + periodMs + "|" + tempsReel;
     }
 
-    public static List<HubEauClient.Observation> getFresh(String code) {
-        Entry e = CACHE.get(code);
+    public static void put(String code, long periodMs, boolean tempsReel, List<HubEauClient.Observation> obs) {
+        CACHE.put(key(code, periodMs, tempsReel), new Entry(obs, System.currentTimeMillis()));
+    }
+
+    public static List<HubEauClient.Observation> getFresh(String code, long periodMs, boolean tempsReel) {
+        Entry e = CACHE.get(key(code, periodMs, tempsReel));
         if (e != null && e.isFresh()) return e.obs;
         return null;
     }
@@ -39,7 +43,7 @@ public final class DebitCache {
     public static void warmup(List<HubEauClient.Station> stations, java.util.concurrent.ExecutorService executor, final long periodMs, final boolean tempsReel) {
         List<HubEauClient.Station> todo = new ArrayList<>();
         for (HubEauClient.Station s : stations) {
-            if (getFresh(s.code) == null) todo.add(s);
+            if (getFresh(s.code, periodMs, tempsReel) == null) todo.add(s);
         }
         if (todo.isEmpty()) return;
         executor.execute(() -> {
@@ -49,7 +53,7 @@ public final class DebitCache {
                     List<HubEauClient.Observation> obs = tempsReel
                             ? HubEauClient.fetchDebitsTempsReel(s.code, now - periodMs, now)
                             : HubEauClient.fetchDebitsJournaliers(s.code, now - periodMs, now);
-                    put(s.code, obs);
+                    put(s.code, periodMs, tempsReel, obs);
                 } catch (Exception ignored) {
                 }
             }
