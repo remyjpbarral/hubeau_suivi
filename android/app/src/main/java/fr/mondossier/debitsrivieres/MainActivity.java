@@ -45,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private final List<HubEauClient.Station> referentielForMap = new ArrayList<>();
 
     public boolean isLoading = false;
+    public boolean chartIsHeight = false;
     public HubEauClient.Station currentStation = null;
     public int selectedPeriod = 1;
     public CharSequence statusText = "";
@@ -205,34 +206,29 @@ public class MainActivity extends AppCompatActivity {
         final long period = PERIODS[selectedPeriod];
         final long now = System.currentTimeMillis();
         final long start = now - period;
-        List<HubEauClient.Observation> cached = DebitCache.getFresh(code, period, tr);
+        HubEauClient.Series cached = DebitCache.getFresh(code, period, tr);
         if (cached != null) {
-            series.clear();
-            series.put(currentStation.libelle, cached);
-            statusText = "";
-            if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
+            applySeries(cached);
             return;
         }
         isLoading = true;
         statusText = getString(R.string.loading);
         if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
         runInBackground(() -> {
-            List<HubEauClient.Observation> obs = null;
+            HubEauClient.Series result = null;
             Exception lastError = null;
-            for (int attempt = 0; attempt < 2 && obs == null; attempt++) {
+            for (int attempt = 0; attempt < 2 && result == null; attempt++) {
                 try {
-                    if (tr) {
-                        obs = HubEauClient.fetchDebitsTempsReel(code, start, now);
-                    } else {
-                        obs = HubEauClient.fetchDebitsJournaliers(code, start, now);
-                    }
+                    result = tr
+                            ? HubEauClient.fetchSeriesTempsReel(code, start, now)
+                            : HubEauClient.fetchSeriesJournaliers(code, start, now);
                 } catch (Exception e) {
                     lastError = e;
                 }
             }
-            final List<HubEauClient.Observation> result = obs;
+            final HubEauClient.Series finalResult = result;
             final Exception finalError = lastError;
-            if (result == null) {
+            if (finalResult == null) {
                 final String reason = finalError != null && finalError.getMessage() != null
                         ? finalError.getMessage() : "réseau indisponible";
                 runOnUiThread(() -> {
@@ -242,18 +238,33 @@ public class MainActivity extends AppCompatActivity {
                 });
                 return;
             }
-            try {
-                DebitCache.put(code, period, tr, result);
-                runOnUiThread(() -> {
-                    isLoading = false;
-                    series.clear();
-                    if (currentStation != null) series.put(currentStation.libelle, result);
-                    statusText = result.isEmpty() ? getString(R.string.no_data) : "";
-                    if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
-                });
-            } catch (Exception ignored) {
-            }
+            DebitCache.put(code, period, tr, finalResult);
+            runOnUiThread(() -> {
+                isLoading = false;
+                applySeries(finalResult);
+                if (chartFragment != null && chartFragment.isAdded()) chartFragment.refreshDisplay();
+            });
         });
+    }
+
+    /** Affiche le débit si la station en produit, sinon la hauteur d'eau. */
+    private void applySeries(HubEauClient.Series s) {
+        series.clear();
+        boolean isHeight = false;
+        List<HubEauClient.Observation> shown;
+        if (!s.q.isEmpty()) {
+            shown = s.q;
+        } else if (!s.h.isEmpty()) {
+            shown = s.h;
+            isHeight = true;
+        } else {
+            shown = java.util.Collections.emptyList();
+        }
+        chartIsHeight = isHeight;
+        if (currentStation != null && !shown.isEmpty()) {
+            series.put(currentStation.libelle, shown);
+        }
+        statusText = shown.isEmpty() ? getString(R.string.no_data) : (isHeight ? "Station sans débit : hauteur d'eau" : "");
     }
 
     HubEauClient.Station stationByLabel(String label) {
@@ -314,9 +325,9 @@ public class MainActivity extends AppCompatActivity {
             for (HubEauClient.Station s : todo) {
                 try {
                     long now = System.currentTimeMillis();
-                    List<HubEauClient.Observation> obs = tr
-                            ? HubEauClient.fetchDebitsTempsReel(s.code, now - period, now)
-                            : HubEauClient.fetchDebitsJournaliers(s.code, now - period, now);
+                    HubEauClient.Series obs = tr
+                            ? HubEauClient.fetchSeriesTempsReel(s.code, now - period, now)
+                            : HubEauClient.fetchSeriesJournaliers(s.code, now - period, now);
                     DebitCache.put(s.code, period, tr, obs);
                 } catch (Exception ignored) {
                 }

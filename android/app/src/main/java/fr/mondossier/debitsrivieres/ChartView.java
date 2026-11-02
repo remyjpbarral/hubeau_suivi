@@ -88,11 +88,19 @@ public class ChartView extends View {
         cursorTextPaint.setTextSize(26f);
     }
 
+    private String unit = "m³/s";
+
     public void setSeries(Map<String, List<HubEauClient.Observation>> s) {
         this.series = s != null ? s : Collections.emptyMap();
         touchX = -1f;
         touchLabel = null;
         hasData = false;
+        invalidate();
+    }
+
+    /** Unité affichée sur l'axe et le curseur : "m³/s" (débit) ou "m" (hauteur). */
+    public void setUnit(String u) {
+        unit = u != null && !u.isEmpty() ? u : "m³/s";
         invalidate();
     }
 
@@ -178,7 +186,7 @@ public class ChartView extends View {
         }
         SimpleDateFormat fmt = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE);
         fmt.setTimeZone(java.util.TimeZone.getDefault());
-        touchLabel = String.format(Locale.FRANCE, "%.1f m³/s", best.debit);
+        touchLabel = String.format(Locale.FRANCE, "m".equals(unit) ? "%.2f m" : "%.1f m³/s", best.debit);
         if (touchListener != null) {
             touchListener.onTouch(new ObservationAt(best.timestampMs, best.debit, fmt.format(new Date(best.timestampMs))));
         }
@@ -236,7 +244,9 @@ public class ChartView extends View {
         for (int i = 0; i <= 4; i++) {
             float y = padT + chartH * i / 4f;
             canvas.drawLine(padL, y, w - padR, y, gridPaint);
-            String label = String.format(Locale.FRANCE, "%.0f", yMax * (4 - i) / 4f);
+            String label = ("m".equals(unit))
+                    ? String.format(Locale.FRANCE, "%.1f", yMax * (4 - i) / 4f)
+                    : String.format(Locale.FRANCE, "%.0f", yMax * (4 - i) / 4f);
             canvas.drawText(label, padL - textPaint.measureText(label) - 8f, y + 8f, textPaint);
         }
         canvas.drawLine(padL, padT, padL, padT + chartH, axisPaint);

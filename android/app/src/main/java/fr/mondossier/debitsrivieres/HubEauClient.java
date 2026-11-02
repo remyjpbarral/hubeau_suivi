@@ -172,20 +172,70 @@ public final class HubEauClient {
         return parseStations(get(url));
     }
 
+    /** Série double : débits (Q, m3/s) et hauteurs (H, m) obtenus en un seul appel API. */
+    public static final class Series {
+        public final List<Observation> q = new ArrayList<>();
+        public final List<Observation> h = new ArrayList<>();
+
+        public boolean isEmpty() {
+            return q.isEmpty() && h.isEmpty();
+        }
+    }
+
     public static List<Observation> fetchDebitsTempsReel(String stationCode, long startMs, long endMs) throws Exception {
+        return fetchSeriesTempsReel(stationCode, startMs, endMs).q;
+    }
+
+    public static Series fetchSeriesTempsReel(String stationCode, long startMs, long endMs) throws Exception {
         SimpleDateFormat fmt = isoUtc();
         String url = BASE + "/observations_tr"
                 + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
-                + "&grandeur_hydro=Q"
                 + "&date_debut_obs=" + fmt.format(new Date(startMs))
                 + "&date_fin_obs=" + fmt.format(new Date(endMs))
                 + "&size=5000&format=json&sort=asc";
-        List<Observation> list = parseObservationsTr(url);
+        Series s = parseObservationsTr(url);
         // le temps réel ne maintient qu'un mois d'historique : complément par débits moyens journaliers si vide
-        if (list.isEmpty() && endMs - startMs > 24L * 3600_000L) {
-            return fetchDebitsJournaliers(stationCode, startMs, endMs);
+        if (s.isEmpty() && endMs - startMs > 24L * 3600_000L) {
+            Series sj = fetchSeriesJournaliers(stationCode, startMs, endMs);
+            s.q.addAll(sj.q);
+            s.h.addAll(sj.h);
         }
-        return list;
+        return s;
+    }
+
+    public static Series fetchSeriesJournaliers(String stationCode, long startMs, long endMs) throws Exception {
+        SimpleDateFormat fmt = isoDate();
+        String url = BASE + "/obs_elab"
+                + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
+                + "&date_debut_obs_elab=" + fmt.format(new Date(startMs))
+                + "&date_fin_obs_elab=" + fmt.format(new Date(endMs))
+                + "&size=20000&format=json&sort=asc";
+        Series s = new Series();
+        JSONObject root = new JSONObject(get(url));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr == null) return s;
+        SimpleDateFormat dfmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        dfmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.getJSONObject(i);
+            double v = o.optDouble("resultat_obs_elab", Double.NaN);
+            String g = o.optString("grandeur_hydro_elab", "");
+            String dateObs = o.optString("date_obs_elab", "");
+            if (Double.isNaN(v) || dateObs.isEmpty()) continue;
+            Date d;
+            try {
+                d = dfmt.parse(dateObs);
+            } catch (Exception e) {
+                continue;
+            }
+            if (d == null) continue;
+            // Q : L/s -> m³/s ; H : mm -> m
+            if (g.startsWith("Q")) s.q.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+            else if (g.startsWith("H")) s.h.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+        }
+        java.util.Collections.sort(s.q, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        java.util.Collections.sort(s.h, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        return s;
     }
 
     public interface RelaySource {
@@ -236,31 +286,11 @@ public final class HubEauClient {
     }
 
     public static List<Observation> fetchDebitsJournaliers(String stationCode, long startMs, long endMs) throws Exception {
-        SimpleDateFormat fmt = isoDate();
-        String url = BASE + "/obs_elab"
-                + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
-                + "&grandeur_hydro_elab=QmnJ"
-                + "&date_debut_obs_elab=" + fmt.format(new Date(startMs))
-                + "&date_fin_obs_elab=" + fmt.format(new Date(endMs))
-                + "&size=20000&format=json&sort=asc";
-        List<Observation> list = new ArrayList<>();
-        JSONObject root = new JSONObject(get(url));
-        JSONArray arr = root.optJSONArray("data");
-        if (arr == null) return list;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.getJSONObject(i);
-            double lps = o.optDouble("resultat_obs_elab", Double.NaN);
-            if (Double.isNaN(lps)) continue;
-            list.add(new Observation(
-                    isoDate().parse(o.optString("date_obs_elab", "")).getTime(),
-                    (float) (lps / 1000.0)));
-        }
-        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
-        return list;
+        return fetchSeriesJournaliers(stationCode, startMs, endMs).q;
     }
 
-    private static List<Observation> parseObservationsTr(String url) throws Exception {
-        List<Observation> list = new ArrayList<>();
+    private static Series parseObservationsTr(String url) throws Exception {
+        Series s = new Series();
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
         String next = url;
@@ -271,22 +301,27 @@ public final class HubEauClient {
             if (arr != null) {
                 for (int i = 0; i < arr.length(); i++) {
                     JSONObject o = arr.getJSONObject(i);
-                    double lps = o.optDouble("resultat_obs", Double.NaN);
+                    double v = o.optDouble("resultat_obs", Double.NaN);
+                    String g = o.optString("grandeur_hydro", "");
                     String dateObs = o.optString("date_obs", "");
-                    if (Double.isNaN(lps) || dateObs.isEmpty()) continue;
+                    if (Double.isNaN(v) || dateObs.isEmpty()) continue;
                     Date d;
                     try {
                         d = fmt.parse(dateObs);
                     } catch (Exception e) {
                         continue;
                     }
-                    if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
+                    if (d == null) continue;
+                    // Q : L/s -> m³/s ; H : mm -> m
+                    if ("Q".equals(g)) s.q.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+                    else if ("H".equals(g)) s.h.add(new Observation(d.getTime(), (float) (v / 1000.0)));
                 }
             }
             next = root.has("next") && !root.isNull("next") ? root.optString("next") : null;
             pages++;
         }
-        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
-        return list;
+        java.util.Collections.sort(s.q, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        java.util.Collections.sort(s.h, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        return s;
     }
 }

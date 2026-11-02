@@ -80,6 +80,7 @@ public class ChartFragment extends Fragment {
             title.setText(getString(R.string.pick_station_hint));
         }
         chart.setSeries(a.series);
+        chart.setUnit(a.chartIsHeight ? "m" : "m³/s");
         status.setText(a.statusText);
         periodSpinner.setSelection(a.selectedPeriod);
     }
