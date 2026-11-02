@@ -39,4 +39,24 @@ public final class CrashLogger implements Thread.UncaughtExceptionHandler {
     public static String last(Context c) {
         return c.getSharedPreferences("debits_crash", Context.MODE_PRIVATE).getString("last_crash", "");
     }
+
+    public static String lastAnr(Context c) {
+        return c.getSharedPreferences("debits_crash", Context.MODE_PRIVATE).getString("last_anr", "");
+    }
+
+    public static String fullReport(Context c) {
+        StringBuilder sb = new StringBuilder();
+        String anr = lastAnr(c);
+        String crash = last(c);
+        if (!anr.isEmpty()) {
+            sb.append("=== DERNIER GEL (ANR) ===\n").append(anr).append("\n\n");
+        }
+        if (!crash.isEmpty()) {
+            sb.append("=== DERNIER PLANTAGE ===\n").append(crash).append("\n\n");
+        }
+        if (sb.length() == 0) return "";
+        sb.append("App: Débits Rivières | Android ").append(android.os.Build.VERSION.RELEASE)
+          .append(" | ").append(android.os.Build.MANUFACTURER).append(" ").append(android.os.Build.MODEL);
+        return sb.toString();
+    }
 }

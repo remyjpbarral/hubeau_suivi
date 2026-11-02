@@ -172,90 +172,156 @@ public final class HubEauClient {
         return parseStations(get(url));
     }
 
+    /** Série double : débits (Q, m3/s) et hauteurs (H, m) obtenus en un seul appel API. */
+    public static final class Series {
+        public final List<Observation> q = new ArrayList<>();
+        public final List<Observation> h = new ArrayList<>();
+
+        public boolean isEmpty() {
+            return q.isEmpty() && h.isEmpty();
+        }
+    }
+
     public static List<Observation> fetchDebitsTempsReel(String stationCode, long startMs, long endMs) throws Exception {
+        return fetchSeriesTempsReel(stationCode, startMs, endMs).q;
+    }
+
+    public static Series fetchSeriesTempsReel(String stationCode, long startMs, long endMs) throws Exception {
         SimpleDateFormat fmt = isoUtc();
         String url = BASE + "/observations_tr"
                 + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
-                + "&grandeur_hydro=Q"
                 + "&date_debut_obs=" + fmt.format(new Date(startMs))
                 + "&date_fin_obs=" + fmt.format(new Date(endMs))
                 + "&size=5000&format=json&sort=asc";
-        List<Observation> list = parseObservationsTr(url);
+        Series s = parseObservationsTr(url);
         // le temps réel ne maintient qu'un mois d'historique : complément par débits moyens journaliers si vide
-        if (list.isEmpty() && endMs - startMs > 24L * 3600_000L) {
-            return fetchDebitsJournaliers(stationCode, startMs, endMs);
+        if (s.isEmpty() && endMs - startMs > 24L * 3600_000L) {
+            Series sj = fetchSeriesJournaliers(stationCode, startMs, endMs);
+            s.q.addAll(sj.q);
+            s.h.addAll(sj.h);
         }
-        return list;
+        return s;
+    }
+
+    public static Series fetchSeriesJournaliers(String stationCode, long startMs, long endMs) throws Exception {
+        SimpleDateFormat fmt = isoDate();
+        String url = BASE + "/obs_elab"
+                + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
+                + "&date_debut_obs_elab=" + fmt.format(new Date(startMs))
+                + "&date_fin_obs_elab=" + fmt.format(new Date(endMs))
+                + "&size=20000&format=json&sort=asc";
+        Series s = new Series();
+        JSONObject root = new JSONObject(get(url));
+        JSONArray arr = root.optJSONArray("data");
+        if (arr == null) return s;
+        SimpleDateFormat dfmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        dfmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject o = arr.getJSONObject(i);
+            double v = o.optDouble("resultat_obs_elab", Double.NaN);
+            String g = o.optString("grandeur_hydro_elab", "");
+            String dateObs = o.optString("date_obs_elab", "");
+            if (Double.isNaN(v) || dateObs.isEmpty()) continue;
+            Date d;
+            try {
+                d = dfmt.parse(dateObs);
+            } catch (Exception e) {
+                continue;
+            }
+            if (d == null) continue;
+            // Q : L/s -> m³/s ; H : mm -> m
+            if (g.startsWith("Q")) s.q.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+            else if (g.startsWith("H")) s.h.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+        }
+        java.util.Collections.sort(s.q, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        java.util.Collections.sort(s.h, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        return s;
+    }
+
+    public interface RelaySource {
+        String load(String stationCode);
+        void save(String stationCode, String content);
+    }
+
+    private static RelaySource relaySource;
+
+    public static void setRelaySource(RelaySource s) {
+        relaySource = s;
     }
 
     public static List<Observation> fetchDebitsFromRelay(String stationCode, long startMs, long endMs) throws Exception {
-        String url = "https://raw.githubusercontent.com/remyjpbarral/hubeau_suivi/data/daily/debits_30j.json";
-        JSONObject root = new JSONObject(get(url));
-        JSONObject stations = root.getJSONObject("stations");
-        if (!stations.has(stationCode)) return new ArrayList<>();
-        JSONArray arr = stations.getJSONArray(stationCode);
+        String url = "https://raw.githubusercontent.com/remyjpbarral/hubeau_suivi/data/daily/stations/"
+                + java.net.URLEncoder.encode(stationCode, "UTF-8") + ".json";
+        String raw = null;
+        Exception netError = null;
+        try {
+            raw = get(url);
+            if (relaySource != null) relaySource.save(stationCode, raw);
+        } catch (Exception e) {
+            netError = e;
+            if (relaySource != null) raw = relaySource.load(stationCode);
+        }
+        if (raw == null) {
+            throw netError != null ? netError : new RuntimeException("relay inaccessible");
+        }
+        JSONObject root = new JSONObject(raw);
+        JSONArray arr = root.getJSONArray("obs");
         List<Observation> list = new ArrayList<>();
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        java.util.LinkedHashMap<String, Observation> byDate = new java.util.LinkedHashMap<>();
         for (int i = 0; i < arr.length(); i++) {
             JSONArray pair = arr.getJSONArray(i);
             try {
                 long t = fmt.parse(pair.getString(0)).getTime();
                 if (t >= startMs && t <= endMs) {
-                    list.add(new Observation(t, (float) pair.getDouble(1)));
+                    byDate.put(pair.getString(0), new Observation(t, (float) pair.getDouble(1)));
                 }
             } catch (Exception ignored) {
             }
         }
+        list.addAll(byDate.values());
         java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
         return list;
     }
 
     public static List<Observation> fetchDebitsJournaliers(String stationCode, long startMs, long endMs) throws Exception {
-        SimpleDateFormat fmt = isoDate();
-        String url = BASE + "/obs_elab"
-                + "?code_entite=" + java.net.URLEncoder.encode(stationCode, "UTF-8")
-                + "&grandeur_hydro_elab=QmnJ"
-                + "&date_debut_obs_elab=" + fmt.format(new Date(startMs))
-                + "&date_fin_obs_elab=" + fmt.format(new Date(endMs))
-                + "&size=20000&format=json&sort=asc";
-        List<Observation> list = new ArrayList<>();
-        JSONObject root = new JSONObject(get(url));
-        JSONArray arr = root.optJSONArray("data");
-        if (arr == null) return list;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.getJSONObject(i);
-            double lps = o.optDouble("resultat_obs_elab", Double.NaN);
-            if (Double.isNaN(lps)) continue;
-            list.add(new Observation(
-                    isoDate().parse(o.optString("date_obs_elab", "")).getTime(),
-                    (float) (lps / 1000.0)));
-        }
-        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
-        return list;
+        return fetchSeriesJournaliers(stationCode, startMs, endMs).q;
     }
 
-    private static List<Observation> parseObservationsTr(String url) throws Exception {
-        List<Observation> list = new ArrayList<>();
-        JSONObject root = new JSONObject(get(url));
-        JSONArray arr = root.optJSONArray("data");
-        if (arr == null) return list;
+    private static Series parseObservationsTr(String url) throws Exception {
+        Series s = new Series();
         SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.getJSONObject(i);
-            double lps = o.optDouble("resultat_obs", Double.NaN);
-            String dateObs = o.optString("date_obs", "");
-            if (Double.isNaN(lps) || dateObs.isEmpty()) continue;
-            Date d;
-            try {
-                d = fmt.parse(dateObs);
-            } catch (Exception e) {
-                continue;
+        String next = url;
+        int pages = 0;
+        while (next != null && !next.isEmpty() && pages < 10) {
+            JSONObject root = new JSONObject(get(next));
+            JSONArray arr = root.optJSONArray("data");
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.getJSONObject(i);
+                    double v = o.optDouble("resultat_obs", Double.NaN);
+                    String g = o.optString("grandeur_hydro", "");
+                    String dateObs = o.optString("date_obs", "");
+                    if (Double.isNaN(v) || dateObs.isEmpty()) continue;
+                    Date d;
+                    try {
+                        d = fmt.parse(dateObs);
+                    } catch (Exception e) {
+                        continue;
+                    }
+                    if (d == null) continue;
+                    // Q : L/s -> m³/s ; H : mm -> m
+                    if ("Q".equals(g)) s.q.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+                    else if ("H".equals(g)) s.h.add(new Observation(d.getTime(), (float) (v / 1000.0)));
+                }
             }
-            if (d != null) list.add(new Observation(d.getTime(), (float) (lps / 1000.0)));
+            next = root.has("next") && !root.isNull("next") ? root.optString("next") : null;
+            pages++;
         }
-        java.util.Collections.sort(list, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
-        return list;
+        java.util.Collections.sort(s.q, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        java.util.Collections.sort(s.h, (a, b) -> Long.compare(a.timestampMs, b.timestampMs));
+        return s;
     }
 }

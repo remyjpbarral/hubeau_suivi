@@ -1,7 +1,12 @@
 package fr.mondossier.debitsrivieres;
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -33,6 +38,8 @@ public class MapFragment extends Fragment implements StationListener {
 
     private MapView map;
     private Drawable icon;
+    private android.widget.Button gpsButton;
+    private static final int REQ_GPS = 1001;
     private final List<HubEauClient.Station> allStations = new ArrayList<>();
     private List<HubEauClient.Station> visibleStations = new ArrayList<>();
     private StationListener listener;
@@ -69,8 +76,75 @@ public class MapFragment extends Fragment implements StationListener {
     @Override
     public void onViewCreated(@NonNull View v, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(v, savedInstanceState);
+        gpsButton = v.findViewById(R.id.gps_button);
+        gpsButton.setOnClickListener(btn -> centerOnGps());
         MainActivity a = (MainActivity) getActivity();
         if (a != null) a.registerMap(this);
+    }
+
+    private void centerOnGps() {
+        if (android.os.Build.VERSION.SDK_INT >= 23
+                && (requireContext().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED)) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_GPS);
+            return;
+        }
+        doCenterOnGps();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_GPS && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            doCenterOnGps();
+        } else {
+            android.widget.Toast.makeText(requireContext(),
+                    "Permission de localisation refusée", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void doCenterOnGps() {
+        try {
+            LocationManager lm = (LocationManager) requireContext()
+                    .getSystemService(Context.LOCATION_SERVICE);
+            if (lm == null) return;
+            Location last = null;
+            try {
+                last = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            } catch (SecurityException ignored) {
+            }
+            if (last == null) {
+                try {
+                    last = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+                } catch (SecurityException ignored) {
+                }
+            }
+            if (last != null) {
+                map.getController().setZoom(11.0);
+                map.getController().animateTo(new GeoPoint(last.getLatitude(), last.getLongitude()));
+                return;
+            }
+            android.widget.Toast.makeText(requireContext(),
+                    "Position en cours d'acquisition, retouchez 📍 dans un instant",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, new LocationListener() {
+                @Override
+                public void onLocationChanged(Location loc) {
+                    try { lm.removeUpdates(this); } catch (Exception ignored) {}
+                    if (map != null && isAdded()) {
+                        map.getController().setZoom(11.0);
+                        map.getController().animateTo(new GeoPoint(loc.getLatitude(), loc.getLongitude()));
+                    }
+                }
+                @Override public void onStatusChanged(String p, int s, Bundle e) {}
+                @Override public void onProviderEnabled(String p) {}
+                @Override public void onProviderDisabled(String p) {}
+            });
+        } catch (Exception e) {
+            android.widget.Toast.makeText(requireContext(),
+                    "GPS indisponible : " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     public void setAllStations(List<HubEauClient.Station> stations, StationListener listener) {

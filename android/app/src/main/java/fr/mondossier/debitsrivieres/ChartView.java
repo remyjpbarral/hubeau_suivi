@@ -88,11 +88,19 @@ public class ChartView extends View {
         cursorTextPaint.setTextSize(26f);
     }
 
+    private String unit = "m³/s";
+
     public void setSeries(Map<String, List<HubEauClient.Observation>> s) {
         this.series = s != null ? s : Collections.emptyMap();
         touchX = -1f;
         touchLabel = null;
         hasData = false;
+        invalidate();
+    }
+
+    /** Unité affichée sur l'axe et le curseur : "m³/s" (débit) ou "m" (hauteur). */
+    public void setUnit(String u) {
+        unit = u != null && !u.isEmpty() ? u : "m³/s";
         invalidate();
     }
 
@@ -106,6 +114,8 @@ public class ChartView extends View {
         invalidate();
     }
 
+    private long lastDrawTs = 0;
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!hasData) return false;
@@ -114,7 +124,11 @@ public class ChartView extends View {
             case MotionEvent.ACTION_MOVE:
                 touchX = event.getX();
                 updateCursor();
-                invalidate();
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (now - lastDrawTs >= 33) {
+                    lastDrawTs = now;
+                    invalidate();
+                }
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
@@ -158,7 +172,7 @@ public class ChartView extends View {
             int mid = (lo + hi) >>> 1;
             HubEauClient.Observation o = obs.get(mid);
             if (o.timestampMs < t) lo = mid + 1;
-            else hi = mid;
+            else hi = mid - 1;
         }
         if (hi >= 0) best = obs.get(hi);
         if (lo < obs.size()) {
@@ -172,7 +186,7 @@ public class ChartView extends View {
         }
         SimpleDateFormat fmt = new SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.FRANCE);
         fmt.setTimeZone(java.util.TimeZone.getDefault());
-        touchLabel = String.format(Locale.FRANCE, "%.1f m³/s", best.debit);
+        touchLabel = String.format(Locale.FRANCE, "m".equals(unit) ? "%.2f m" : "%.1f m³/s", best.debit);
         if (touchListener != null) {
             touchListener.onTouch(new ObservationAt(best.timestampMs, best.debit, fmt.format(new Date(best.timestampMs))));
         }
@@ -230,7 +244,9 @@ public class ChartView extends View {
         for (int i = 0; i <= 4; i++) {
             float y = padT + chartH * i / 4f;
             canvas.drawLine(padL, y, w - padR, y, gridPaint);
-            String label = String.format(Locale.FRANCE, "%.0f", yMax * (4 - i) / 4f);
+            String label = ("m".equals(unit))
+                    ? String.format(Locale.FRANCE, "%.1f", yMax * (4 - i) / 4f)
+                    : String.format(Locale.FRANCE, "%.0f", yMax * (4 - i) / 4f);
             canvas.drawText(label, padL - textPaint.measureText(label) - 8f, y + 8f, textPaint);
         }
         canvas.drawLine(padL, padT, padL, padT + chartH, axisPaint);
@@ -259,10 +275,15 @@ public class ChartView extends View {
             fillPaint.setColor(color);
             fillPaint.setAlpha(40);
 
+            int maxPoints = (int) (chartW / 2f);
+            int step = Math.max(1, obs.size() / Math.max(1, maxPoints));
             Path line = new Path();
             Path fill = new Path();
             boolean first = true;
-            for (HubEauClient.Observation o : obs) {
+            HubEauClient.Observation lastDrawn = null;
+            for (int i = 0; i < obs.size(); i += step) {
+                HubEauClient.Observation o = obs.get(i);
+                lastDrawn = o;
                 float x = padL + chartW * (o.timestampMs - tMin) / (tMax - tMin);
                 float y = padT + chartH * (1f - o.debit / yMax);
                 if (first) {
@@ -275,8 +296,11 @@ public class ChartView extends View {
                     fill.lineTo(x, y);
                 }
             }
-            float lastX = padL + chartW * (obs.get(obs.size() - 1).timestampMs - tMin) / (tMax - tMin);
-            fill.lineTo(lastX, padT + chartH);
+            if (lastDrawn == null && !obs.isEmpty()) lastDrawn = obs.get(obs.size() - 1);
+            if (lastDrawn != null) {
+                float lastX = padL + chartW * (lastDrawn.timestampMs - tMin) / (tMax - tMin);
+                fill.lineTo(lastX, padT + chartH);
+            }
             fill.close();
             canvas.drawPath(fill, fillPaint);
             fillPaint.setAlpha(255);
@@ -297,7 +321,7 @@ public class ChartView extends View {
                 int mid = (lo + hi) >>> 1;
                 HubEauClient.Observation o = obs.get(mid);
                 if (o.timestampMs < t) lo = mid + 1;
-                else hi = mid;
+                else hi = mid - 1;
             }
             if (hi >= 0) best = obs.get(hi);
             if (lo < obs.size()) {
